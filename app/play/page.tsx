@@ -8,7 +8,7 @@ import type { EvidenceCard } from "@/engine/types";
 import { useGameStore } from "@/store/gameStore";
 import { scenarioById } from "@/data/scenarios";
 import { roleById } from "@/data/roles";
-import { adjacentIndices, calmCost, escortBlocked, escortCost, isPassable, moveCost } from "@/engine/rules";
+import { adjacentIndices, calmCost, escortCost, isPassable, moveCost } from "@/engine/rules";
 import { useHydrated } from "@/lib/useHydrated";
 import { MapGrid } from "@/components/board/MapGrid";
 import { PanicMeter } from "@/components/hud/PanicMeter";
@@ -81,15 +81,14 @@ export default function PlayPage() {
 
   const onTileClick = (index: number) => {
     if (state.phase === "phase3_evacuation" && escortVillagerId && moveTargets.includes(index)) {
-      const from = state.tiles[current.position];
-      if (!escortBlocked(state, from, state.tiles[index])) {
-        dispatch({
-          type: "ESCORT_VILLAGER",
-          playerId: current.id,
-          villagerId: escortVillagerId,
-          targetTileIndex: index,
-        });
-      }
+      // Let the reducer decide — if the escort is blocked (e.g. Liquefaction),
+      // it logs the reason so the player gets feedback instead of a silent no-op.
+      dispatch({
+        type: "ESCORT_VILLAGER",
+        playerId: current.id,
+        villagerId: escortVillagerId,
+        targetTileIndex: index,
+      });
       setEscortVillagerId(null);
       setSelectedTile(null);
       return;
