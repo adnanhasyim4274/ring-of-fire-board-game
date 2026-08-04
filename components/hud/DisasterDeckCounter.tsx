@@ -1,31 +1,45 @@
 "use client";
-import { Flame, Layers } from "lucide-react";
+import { Flame, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { en } from "@/lib/i18n/en";
+import { id } from "@/lib/i18n/id";
 
+/** Dek Bencana adalah jam permainan: habis = kalah karena Kehabisan Waktu. */
 export function DisasterDeckCounter({
   remaining,
   total,
-  bigThreat,
 }: {
   remaining: number;
   total: number;
-  bigThreat?: boolean; // e.g. "Wildlife Fleeing" confirmed the eruption is close
 }) {
-  const low = remaining <= 5 || bigThreat;
+  const low = remaining <= 4;
+  const pct = total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
   return (
-    <div className="flex flex-col gap-1" aria-label={`${en.hud.disasterDeck}: ${remaining} ${en.hud.cardsLeft}`}>
-      <div className="flex items-center gap-1 text-xs font-bold">
-        {low ? <Flame className="h-4 w-4 text-red-600 panic-pulse" /> : <Layers className="h-4 w-4 text-zinc-600" />}
-        <span>{en.hud.disasterDeck}</span>
-        <span className={cn("ml-auto tabular-nums", low && "text-red-600")}>{remaining}</span>
+    <div
+      className="flex flex-col gap-1"
+      aria-label={`${id.hud.disasterDeck}: ${remaining} ${id.hud.cardsLeft}`}
+    >
+      <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide">
+        {low ? (
+          <Flame className="panic-pulse h-4 w-4 text-red-600" />
+        ) : (
+          <Hourglass className="h-4 w-4 text-zinc-500" />
+        )}
+        <span className="text-zinc-600">{id.hud.disasterDeck}</span>
+        <span className={cn("ml-auto text-sm tabular-nums", low ? "text-red-600" : "text-zinc-800")}>
+          {remaining}
+        </span>
       </div>
-      <div className="h-3 overflow-hidden rounded-sm border border-zinc-300 bg-zinc-100">
+      <div className="h-3 overflow-hidden rounded-[3px] border border-black/10 bg-[#efece7]" aria-hidden>
         <div
-          className={cn("h-full transition-all", low ? "bg-red-500" : "bg-orange-400")}
-          style={{ width: `${(remaining / total) * 100}%` }}
+          className={cn("h-full transition-all duration-500", low ? "bg-red-500" : "bg-ember")}
+          style={{ width: `${pct}%` }}
         />
       </div>
+      {low && (
+        <p className="text-[10px] font-bold leading-tight text-red-600">
+          {id.hud.disasterDeckHint}
+        </p>
+      )}
     </div>
   );
 }

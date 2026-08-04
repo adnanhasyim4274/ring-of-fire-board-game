@@ -1,299 +1,388 @@
-import type { EvidenceCard } from "@/engine/types";
+// ============================================================================
+// RING OF FIRE v2.0 — Kartu Evidence (25 unik x 2 salinan = dek 50)
+// 6 kategori 5W1H: WHAT, WHERE, WHEN, WHO, WHY, HOW.
+//
+// DWIFUNGSI — jantung permainan:
+//   ZONA ATAS  (milEffect)      : buka 1 gembok kategorinya di Kartu Berita.
+//   ZONA BAWAH (resourceEffect) : buang kartunya untuk keuntungan taktis.
+// Satu kartu, satu pilihan. Membuktikan kebenaran ATAU menyelamatkan nyawa
+// lebih cepat — tidak bisa dua-duanya.
+//
+// Kartu 2 poin punya bonus tambahan. Hanya SATU kartu wildcard di seluruh dek:
+// "Konfirmasi Otoritas (BMKG)", HOW 3 poin, membuka gembok kategori apa pun.
+// Sumber: docs/00-MASTER-SPEC-v2.md §5.2
+// ============================================================================
+
+import type { EvidenceCard, EvidenceCategory } from "@/engine/types";
 import { gameConfig } from "./gameConfig";
 
-// Section 6.2 final content (evd_what_01, evd_where_01, evd_why_01, evd_who_01,
-// evd_how_01) plus 4 additional cards per category = 25 unique cards.
-// Every card is dual-use: milEffect (verify) OR resourceEffect (discard).
-// 2-point bonuses: WHO → auto-calm nearest panicked villager; others → refund 1 AP.
 export const evidenceCards: EvidenceCard[] = [
-  // ——— WHAT (is the content itself real?) ———
+  // ——————————————————————————————————————————————————————————————————
+  // WHAT 🔍 — Apa yang aneh pada kontennya sendiri?
+  // ——————————————————————————————————————————————————————————————————
   {
     id: "evd_what_01",
     category: "WHAT",
-    title: "Photo Detective",
+    title: "Detektif Foto",
     points: 1,
-    description: "Look at the wave's shadow and lighting — they don't match! Also, the water's color looks like a computer edit, not a real photo.",
-    milEffect: "Opens 1 [WHAT] lock on an Event Card to debunk a visual manipulation.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
+    description:
+      "Perhatikan tepi gelombang di foto itu — pikselnya melembek seperti cat basah, sementara kapal di sebelahnya tajam. Dua bagian ini tidak berasal dari satu kamera.",
+    milEffect: "Membuka 1 gembok [WHAT] pada Kartu Berita aktif.",
+    resourceName: "Sprint Darurat",
+    resourceEffect: "Buang kartu ini untuk langsung mendapatkan +2 AP.",
     resourceKind: "ap2",
   },
   {
     id: "evd_what_02",
     category: "WHAT",
-    title: "Frame-by-Frame Check",
+    title: "Analisis Bayangan & Pantulan",
     points: 2,
-    description: "Pause the video! Between two frames the 'giant wave' jumps position — this clip was cut together from a disaster movie.",
-    milEffect: "Opens 1 [WHAT] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
+    description:
+      "Bayangan tiang listrik jatuh ke kiri, bayangan orangnya ke kanan. Dalam satu foto hanya ada satu matahari — jadi salah satunya ditempelkan.",
+    milEffect:
+      "Membuka 1 gembok [WHAT]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Jalur Alternatif",
+    resourceEffect:
+      "Buang kartu ini untuk melintasi 1 ubin terdampak bencana tanpa penalti AP.",
     resourceKind: "alt_route",
     bonus: "refund_ap",
   },
   {
     id: "evd_what_03",
     category: "WHAT",
-    title: "Spot the Sloppy Edit",
-    points: 1,
-    description: "Zoom in on the corner — the shop sign is written in a language from another country, and the shadows point two different ways.",
-    milEffect: "Opens 1 [WHAT] lock on an Event Card.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
+    title: "Deteksi Artefak AI",
+    points: 2,
+    description:
+      "Zoom ke latar: tulisan di papan toko berubah jadi huruf yang tidak ada di bahasa mana pun, dan satu orang punya enam jari. Mesin penghasil gambar selalu tergelincir di detail kecil.",
+    milEffect:
+      "Membuka 1 gembok [WHAT]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
     resourceKind: "calm_free",
+    bonus: "refund_ap",
   },
   {
     id: "evd_what_04",
     category: "WHAT",
-    title: "Old Footage Archive",
-    points: 2,
-    description: "This exact clip was already on TV years ago — the news archive has it filed under a completely different disaster.",
-    milEffect: "Opens 1 [WHAT] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
+    title: "Bandingkan Frame demi Frame",
+    points: 1,
+    description:
+      "Jeda videonya. Antara dua frame, gelombang raksasa itu melompat posisi tanpa alasan — ini potongan dua klip berbeda yang disambung.",
+    milEffect: "Membuka 1 gembok [WHAT] pada Kartu Berita aktif.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
     resourceKind: "trade",
-    bonus: "refund_ap",
   },
   {
     id: "evd_what_05",
     category: "WHAT",
-    title: "Screenshot Zoom-In",
+    title: "Zoom Piksel",
     points: 1,
-    description: "Zoomed all the way in, the 'flood water' pixels smear like paint — this image came out of a picture generator, not a camera.",
-    milEffect: "Opens 1 [WHAT] lock on an Event Card.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
-    resourceKind: "ap2",
+    description:
+      "Perbesar sampai maksimal. Di sekeliling objek utama ada kotak-kotak buram khas gambar yang berkali-kali disimpan ulang — tanda unggahan daur ulang, bukan rekaman asli.",
+    milEffect: "Membuka 1 gembok [WHAT] pada Kartu Berita aktif.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
+    resourceKind: "calm_free",
   },
-  // ——— WHERE (is it from here?) ———
+
+  // ——————————————————————————————————————————————————————————————————
+  // WHERE 📍 — Di mana sebenarnya ini terjadi?
+  // ——————————————————————————————————————————————————————————————————
   {
     id: "evd_where_01",
     category: "WHERE",
-    title: "Reverse Image Search",
+    title: "Pencarian Gambar Terbalik",
     points: 2,
-    description: "A search engine shows this photo of a collapsed street is actually from a neighboring country last year, not from here!",
-    milEffect: "Opens 1 [WHERE] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
+    description:
+      "Seret gambarnya ke mesin pencari gambar. Foto \"jalan runtuh di kota kita\" ini ternyata liputan bencana di negara tetangga beberapa tahun lalu.",
+    milEffect:
+      "Membuka 1 gembok [WHERE]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Jalur Alternatif",
+    resourceEffect:
+      "Buang kartu ini untuk melintasi 1 ubin terdampak bencana tanpa penalti AP.",
     resourceKind: "alt_route",
     bonus: "refund_ap",
   },
   {
     id: "evd_where_02",
     category: "WHERE",
-    title: "Map Cross-Check",
-    points: 1,
-    description: "The message says the bridge by the market collapsed — but our village doesn't even have a bridge by the market. Check the map!",
-    milEffect: "Opens 1 [WHERE] lock on an Event Card.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
-    resourceKind: "ap2",
+    title: "Cek Geotag",
+    points: 2,
+    description:
+      "Data lokasi yang menempel di berkas foto menunjuk titik 3.000 km dari sini. Seseorang hanya mengganti keterangannya supaya terdengar seperti kejadian lokal.",
+    milEffect:
+      "Membuka 1 gembok [WHERE]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
+    resourceKind: "trade",
+    bonus: "refund_ap",
   },
   {
     id: "evd_where_03",
     category: "WHERE",
-    title: "Local Landmark Test",
+    title: "Uji Landmark Lokal",
     points: 1,
-    description: "Those mountains in the background? Wrong shape, wrong direction. That skyline isn't ours at all.",
-    milEffect: "Opens 1 [WHERE] lock on an Event Card.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
-    resourceKind: "calm_free",
+    description:
+      "Gunung di latar belakang itu bentuknya salah dan arahnya terbalik dari sini. Siapa pun yang tinggal di sektor ini akan langsung tahu.",
+    milEffect: "Membuka 1 gembok [WHERE] pada Kartu Berita aktif.",
+    resourceName: "Sprint Darurat",
+    resourceEffect: "Buang kartu ini untuk langsung mendapatkan +2 AP.",
+    resourceKind: "ap2",
   },
   {
     id: "evd_where_04",
     category: "WHERE",
-    title: "Geotag Inspector",
-    points: 2,
-    description: "The photo's hidden location data says it was taken 3,000 km away — someone just re-captioned it for our town.",
-    milEffect: "Opens 1 [WHERE] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
-    resourceKind: "trade",
-    bonus: "refund_ap",
-  },
-  {
-    id: "evd_where_05",
-    category: "WHERE",
-    title: "Ask the Coast Patrol",
+    title: "Cocokkan dengan Peta Resmi",
     points: 1,
-    description: "The volunteers actually standing on the beach right now report: the water level is completely normal.",
-    milEffect: "Opens 1 [WHERE] lock on an Event Card.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
+    description:
+      "Pesannya menyebut jembatan di dekat pasar ambruk — padahal di peta wilayah ini tidak pernah ada jembatan di sana.",
+    milEffect: "Membuka 1 gembok [WHERE] pada Kartu Berita aktif.",
+    resourceName: "Jalur Alternatif",
+    resourceEffect:
+      "Buang kartu ini untuk melintasi 1 ubin terdampak bencana tanpa penalti AP.",
     resourceKind: "alt_route",
   },
-  // ——— WHY (why was this posted?) ———
+
+  // ——————————————————————————————————————————————————————————————————
+  // WHEN 🕐 — Kapan aslinya ini terjadi?
+  // ——————————————————————————————————————————————————————————————————
   {
-    id: "evd_why_01",
-    category: "WHY",
-    title: "Phishing Link Warning",
-    points: 1,
-    description: "This chain message pressures us to click a strange link to get emergency food aid. Watch out — it's just a scammer's trick to steal our personal data!",
-    milEffect: "Opens 1 [WHY] lock on an Event Card.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
-    resourceKind: "trade",
-  },
-  {
-    id: "evd_why_02",
-    category: "WHY",
-    title: "Who Profits?",
+    id: "evd_when_01",
+    category: "WHEN",
+    title: "Ekstraksi Metadata",
     points: 2,
-    description: "Follow the money: every share of this 'warning' earns the poster ad money. Fear is their business model.",
-    milEffect: "Opens 1 [WHY] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
+    description:
+      "Berkas fotonya menyimpan tanggal pemotretan di dalam dirinya sendiri: empat tahun lalu, musim yang berbeda, jauh sebelum krisis ini dimulai.",
+    milEffect:
+      "Membuka 1 gembok [WHEN]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Sprint Darurat",
+    resourceEffect: "Buang kartu ini untuk langsung mendapatkan +2 AP.",
     resourceKind: "ap2",
     bonus: "refund_ap",
   },
   {
-    id: "evd_why_03",
-    category: "WHY",
-    title: "Clickbait Alarm",
+    id: "evd_when_02",
+    category: "WHEN",
+    title: "Arsip Berita Lama",
     points: 1,
-    description: "ALL CAPS, six sirens, and 'share before it's deleted!!' — real safety warnings inform you, they don't chase clicks.",
-    milEffect: "Opens 1 [WHY] lock on an Event Card.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
+    description:
+      "Klip ini pernah tayang di televisi bertahun-tahun lalu. Di arsip berita, judulnya bencana yang sama sekali berbeda.",
+    milEffect: "Membuka 1 gembok [WHEN] pada Kartu Berita aktif.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
+    resourceKind: "trade",
+  },
+  {
+    id: "evd_when_03",
+    category: "WHEN",
+    title: "Cek Cuaca Hari Itu",
+    points: 1,
+    description:
+      "Katanya direkam pagi ini saat hujan deras. Catatan cuaca hari ini: cerah sepanjang pagi, dan bayangan di video menunjuk matahari sore.",
+    milEffect: "Membuka 1 gembok [WHEN] pada Kartu Berita aktif.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
     resourceKind: "calm_free",
   },
   {
-    id: "evd_why_04",
-    category: "WHY",
-    title: "Donation Account Check",
-    points: 2,
-    description: "Real relief donations go to registered organizations you can look up — never to one stranger's personal bank account.",
-    milEffect: "Opens 1 [WHY] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
-    resourceKind: "trade",
-    bonus: "refund_ap",
+    id: "evd_when_04",
+    category: "WHEN",
+    title: "Rekonstruksi Linimasa",
+    points: 3,
+    description:
+      "Susun semuanya berurutan: catatan gempa resmi, jam pada rekaman CCTV, dan waktu unggahan pertama. Ketiganya harus cocok — kalau berita ini benar, urutannya rapi; kalau palsu, satu di antaranya pasti mendahului kejadiannya.",
+    milEffect:
+      "Membuka 1 gembok [WHEN] pada Kartu Berita aktif, sekuat apa pun klaimnya.",
+    resourceName: "Ketahanan Mental",
+    resourceEffect:
+      "Buang kartu ini untuk mencegah Meter Kepanikan naik pada ronde ini.",
+    resourceKind: "panic_shield",
   },
-  {
-    id: "evd_why_05",
-    category: "WHY",
-    title: "Fear Factory",
-    points: 1,
-    description: "This account posts a new 'imminent disaster' every single week. Scaring people is what it does — being right is not.",
-    milEffect: "Opens 1 [WHY] lock on an Event Card.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
-    resourceKind: "alt_route",
-  },
-  // ——— WHO (who is spreading it?) ———
+
+  // ——————————————————————————————————————————————————————————————————
+  // WHO 👤 — Siapa yang bilang, dan seberapa kredibel?
+  // ——————————————————————————————————————————————————————————————————
   {
     id: "evd_who_01",
     category: "WHO",
-    title: "Trace the Poster's Account",
+    title: "Lacak Akun Penyebar",
     points: 2,
-    description: "The social media account spreading this volcano-eruption info was created just yesterday evening, has no real name, and uses an animal photo as its profile picture. Very suspicious!",
-    milEffect: "Opens 1 [WHO] lock. Bonus at 2 points: automatically calms 1 Panicked Villager on the nearest tile.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
+    description:
+      "Akun yang menyebarkan info letusan ini dibuat kemarin sore, tanpa nama asli, dan memakai foto hewan sebagai profil. Sangat mencurigakan.",
+    milEffect:
+      "Membuka 1 gembok [WHO]. Bonus 2 poin: otomatis menenangkan 1 Warga Panik di ubin terdekat.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
     resourceKind: "calm_free",
     bonus: "calm_nearest",
   },
   {
     id: "evd_who_02",
     category: "WHO",
-    title: "Blue-Check Double-Check",
+    title: "Cek Centang Biru",
     points: 1,
-    description: "The 'official agency account' has one letter swapped in its name and zero older posts. It's an impostor.",
-    milEffect: "Opens 1 [WHO] lock on an Event Card.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
+    description:
+      "Akun \"lembaga resmi\" ini namanya berselisih satu huruf dari yang asli dan tidak punya unggahan lama sama sekali. Ini akun tiruan.",
+    milEffect: "Membuka 1 gembok [WHO] pada Kartu Berita aktif.",
+    resourceName: "Sprint Darurat",
+    resourceEffect: "Buang kartu ini untuk langsung mendapatkan +2 AP.",
     resourceKind: "ap2",
   },
   {
     id: "evd_who_03",
     category: "WHO",
-    title: "Village Elder Interview",
-    points: 1,
-    description: "The elder the message quotes says she never said any of it. The quote was invented to borrow her authority.",
-    milEffect: "Opens 1 [WHO] lock on an Event Card.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
-    resourceKind: "calm_free",
-  },
-  {
-    id: "evd_who_04",
-    category: "WHO",
-    title: "Bot Swarm Detector",
+    title: "Deteksi Gerombolan Bot",
     points: 2,
-    description: "300 accounts posted this word-for-word in the same minute. Real witnesses don't type in perfect unison — bots do.",
-    milEffect: "Opens 1 [WHO] lock. Bonus at 2 points: automatically calms 1 Panicked Villager on the nearest tile.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
+    description:
+      "Tiga ratus akun mengunggah kalimat yang sama persis dalam menit yang sama. Saksi sungguhan tidak pernah mengetik serempak — bot iya.",
+    milEffect:
+      "Membuka 1 gembok [WHO]. Bonus 2 poin: otomatis menenangkan 1 Warga Panik di ubin terdekat.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
     resourceKind: "trade",
     bonus: "calm_nearest",
   },
   {
-    id: "evd_who_05",
+    id: "evd_who_04",
     category: "WHO",
-    title: "Contact the Real Reporter",
-    points: 1,
-    description: "The journalist named in the article replies: 'I never wrote this.' Someone pasted her byline onto a fake story.",
-    milEffect: "Opens 1 [WHO] lock on an Event Card.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
-    resourceKind: "alt_route",
+    title: "Hubungi Narasumber Asli",
+    points: 3,
+    description:
+      "Kami menelepon orang yang namanya dicatut di berita itu. Jawabannya satu kalimat: \"Saya tidak pernah mengatakan itu.\" Kutipan dibuat untuk meminjam wibawanya.",
+    milEffect:
+      "Membuka 1 gembok [WHO] pada Kartu Berita aktif, bahkan jika sumbernya mengaku pejabat.",
+    resourceName: "Ketahanan Mental",
+    resourceEffect:
+      "Buang kartu ini untuk mencegah Meter Kepanikan naik pada ronde ini.",
+    resourceKind: "panic_shield",
   },
-  // ——— HOW (what does the science say?) ———
+
+  // ——————————————————————————————————————————————————————————————————
+  // WHY 🎭 — Kenapa ini disebarkan? Siapa untung?
+  // ——————————————————————————————————————————————————————————————————
+  {
+    id: "evd_why_01",
+    category: "WHY",
+    title: "Waspada Phishing",
+    points: 1,
+    description:
+      "Pesan berantai ini menyuruh mengeklik tautan asing demi bantuan pangan darurat. Hati-hati — ini jebakan untuk mencuri data pribadimu.",
+    milEffect: "Membuka 1 gembok [WHY] pada Kartu Berita aktif.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
+    resourceKind: "trade",
+  },
+  {
+    id: "evd_why_02",
+    category: "WHY",
+    title: "Siapa yang Untung?",
+    points: 2,
+    description:
+      "Ikuti aliran uangnya: tiap kali \"peringatan\" ini dibagikan, pemilik akun dapat pemasukan iklan. Ketakutanmu adalah model bisnisnya.",
+    milEffect:
+      "Membuka 1 gembok [WHY]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Sprint Darurat",
+    resourceEffect: "Buang kartu ini untuk langsung mendapatkan +2 AP.",
+    resourceKind: "ap2",
+    bonus: "refund_ap",
+  },
+  {
+    id: "evd_why_03",
+    category: "WHY",
+    title: "Cek Rekening Donasi",
+    points: 2,
+    description:
+      "Donasi bencana yang sah mengalir ke lembaga terdaftar yang laporannya bisa dibuka siapa saja — bukan ke rekening pribadi satu orang asing.",
+    milEffect:
+      "Membuka 1 gembok [WHY]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
+    resourceKind: "trade",
+    bonus: "refund_ap",
+  },
+  {
+    id: "evd_why_04",
+    category: "WHY",
+    title: "Alarm Clickbait",
+    points: 1,
+    description:
+      "HURUF BESAR SEMUA, enam ikon sirene, dan \"sebarkan sebelum dihapus!!\". Peringatan keselamatan sungguhan memberi informasi, bukan memburu klik.",
+    milEffect: "Membuka 1 gembok [WHY] pada Kartu Berita aktif.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
+    resourceKind: "calm_free",
+  },
+
+  // ——————————————————————————————————————————————————————————————————
+  // HOW 🔬 — Bagaimana kata sains?
+  // ——————————————————————————————————————————————————————————————————
   {
     id: "evd_how_01",
     category: "HOW",
-    title: "Official Confirmation (Volcanology Center & BMKG)",
+    title: "Konfirmasi Otoritas (BMKG)",
     points: 3,
-    description: "According to a live briefing from the official scientific disaster-monitoring agency, there is no tectonic plate movement or volcanic activity today. The villagers' report is completely false!",
-    milEffect: "WILDCARD! Can be used to open a [HOW] lock, OR any other lock category needed at the table.",
-    resourceEffectName: "Mental Fortitude",
-    resourceEffect: "Discard this card to prevent the Panic Meter from rising this round, even if the team fails to resolve a hoax.",
+    description:
+      "Menurut keterangan langsung dari lembaga pemantau resmi, tidak ada aktivitas seismik maupun vulkanik yang cocok dengan klaim itu hari ini. Data mentahnya terbuka dan bisa dicek siapa pun.",
+    milEffect:
+      "WILDCARD! Bisa dipakai membuka gembok [HOW], ATAU gembok kategori apa pun yang dibutuhkan meja.",
+    resourceName: "Ketahanan Mental",
+    resourceEffect:
+      "Buang kartu ini untuk mencegah Meter Kepanikan naik pada ronde ini, bahkan jika tim gagal memecahkan hoaks.",
     resourceKind: "panic_shield",
     isWildcard: true,
   },
   {
     id: "evd_how_02",
     category: "HOW",
-    title: "Science Class Memory",
-    points: 1,
-    description: "Remember class: no method on Earth can predict the exact hour of an earthquake. Anyone claiming '2 AM sharp' is making it up.",
-    milEffect: "Opens 1 [HOW] lock on an Event Card.",
-    resourceEffectName: "Emergency Sprint",
-    resourceEffect: "Discard this card for an instant +2 AP.",
-    resourceKind: "ap2",
-  },
-  {
-    id: "evd_how_03",
-    category: "HOW",
-    title: "Seismograph Reading",
+    title: "Catatan Seismograf",
     points: 2,
-    description: "The station's own needle tells the truth: no tremor recorded in the last 24 hours. The 'constant shaking' story is fiction.",
-    milEffect: "Opens 1 [HOW] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Alternate Route",
-    resourceEffect: "Discard this card to move across 1 disaster-affected tile without the weather/terrain penalty.",
+    description:
+      "Jarum stasiun pemantau tidak bisa berbohong: nol getaran tercatat dalam 24 jam terakhir. Cerita \"tanah bergetar terus\" itu fiksi.",
+    milEffect:
+      "Membuka 1 gembok [HOW]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Jalur Alternatif",
+    resourceEffect:
+      "Buang kartu ini untuk melintasi 1 ubin terdampak bencana tanpa penalti AP.",
     resourceKind: "alt_route",
     bonus: "refund_ap",
   },
   {
-    id: "evd_how_04",
+    id: "evd_how_03",
     category: "HOW",
-    title: "Tsunami Signs Checklist",
+    title: "Daftar Periksa Tanda Tsunami",
     points: 1,
-    description: "The real natural warning signs: a strong long quake, the sea pulling back, a roaring sound. Match the story against the checklist.",
-    milEffect: "Opens 1 [HOW] lock on an Event Card.",
-    resourceEffectName: "Loudspeaker",
-    resourceEffect: "Discard this card to change 1 Panicked Villager back to Calm for free (0 AP).",
+    description:
+      "Tanda alam yang sungguhan cuma tiga: guncangan kuat dan lama, air laut surut mendadak, dan suara gemuruh dari laut. Cocokkan beritanya dengan daftar ini.",
+    milEffect: "Membuka 1 gembok [HOW] pada Kartu Berita aktif.",
+    resourceName: "Pengeras Suara",
+    resourceEffect:
+      "Buang kartu ini untuk mengubah 1 Warga Panik menjadi Tenang secara gratis (0 AP).",
     resourceKind: "calm_free",
   },
   {
-    id: "evd_how_05",
+    id: "evd_how_04",
     category: "HOW",
-    title: "Volcano Observatory Bulletin",
+    title: "Buletin Pos Pengamatan Gunung Api",
     points: 2,
-    description: "Today's official bulletin: gas venting on the ridge can glow faintly at night — natural, monitored, and no spirits involved.",
-    milEffect: "Opens 1 [HOW] lock. Bonus at 2 points: the player using this card gets 1 AP refunded.",
-    resourceEffectName: "Logistics Assist",
-    resourceEffect: "Discard this card to trade 1 card from your hand with 1 card from another player's hand, at no AP cost.",
+    description:
+      "Buletin hari ini: semburan gas di punggungan memang bisa berpendar samar pada malam hari — wajar, terpantau, dan tidak melibatkan makhluk halus apa pun.",
+    milEffect:
+      "Membuka 1 gembok [HOW]. Bonus 2 poin: pemain yang memainkannya mendapat 1 AP kembali.",
+    resourceName: "Bantuan Logistik",
+    resourceEffect:
+      "Buang kartu ini untuk menukar 1 kartu di tanganmu dengan 1 kartu pemain lain, tanpa biaya AP.",
     resourceKind: "trade",
     bonus: "refund_ap",
   },
@@ -303,7 +392,19 @@ export const evidenceCardById: Record<string, EvidenceCard> = Object.fromEntries
   evidenceCards.map((c) => [c.id, c])
 );
 
-/** Deck = every unique card x gameConfig.evidenceCopies (default 50 cards). */
+export const evidenceCardsByCategory: Record<EvidenceCategory, EvidenceCard[]> = {
+  WHAT: evidenceCards.filter((c) => c.category === "WHAT"),
+  WHERE: evidenceCards.filter((c) => c.category === "WHERE"),
+  WHEN: evidenceCards.filter((c) => c.category === "WHEN"),
+  WHO: evidenceCards.filter((c) => c.category === "WHO"),
+  WHY: evidenceCards.filter((c) => c.category === "WHY"),
+  HOW: evidenceCards.filter((c) => c.category === "HOW"),
+};
+
+/** Satu-satunya kartu wildcard di seluruh dek. */
+export const wildcardEvidenceId = "evd_how_01";
+
+/** Dek Evidence = tiap kartu unik x gameConfig.evidenceCopies (25 x 2 = 50). */
 export function buildEvidenceDeck(): string[] {
   const ids: string[] = [];
   for (const c of evidenceCards) {

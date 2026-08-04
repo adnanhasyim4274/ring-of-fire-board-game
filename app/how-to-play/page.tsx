@@ -1,128 +1,347 @@
+"use client";
 import Link from "next/link";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import type { ReactNode } from "react";
+import {
+  ArrowLeft,
+  BookOpen,
+  Check,
+  Gavel,
+  Play,
+  Target,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
 import { roles } from "@/data/roles";
-import { en } from "@/lib/i18n/en";
-import { roleEmoji } from "@/lib/roleEmoji";
+import { gameConfig } from "@/data/gameConfig";
+import type { DifficultyId } from "@/data/gameConfig";
+import { Button } from "@/components/ui/Button";
+import { PHASE_ORDER } from "@/components/hud/PhaseIndicator";
+import { OutcomeBanner } from "@/components/cards/OutcomeBanner";
+import { cn } from "@/lib/utils";
+import { id } from "@/lib/i18n/id";
+import { emojiForRole } from "@/lib/roleEmoji";
+import { SECTOR_COLOR } from "@/lib/theme";
+import { CENTRE, RING_RADIUS, VIEWBOX, seaRoutePath, tileHexPoints } from "@/lib/ring";
 
-export const metadata = { title: "How to Play — Ring of Fire Board Game" };
+const RING_SIZE = 28;
+const POS_SIAGA = [0, 7, 14, 21];
+const SEA_ROUTES: [number, number][] = [
+  [0, 7],
+  [7, 14],
+  [14, 21],
+  [21, 0],
+];
+
+function sectorOf(i: number) {
+  if (i < 7) return "merah" as const;
+  if (i < 14) return "teal" as const;
+  if (i < 21) return "kuning" as const;
+  return "biru" as const;
+}
 
 export default function HowToPlayPage() {
+  const s = id.howTo.sections;
+
   return (
-    <main className="mx-auto w-full max-w-md flex-1 space-y-5 p-4 pb-12">
+    <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 p-4 pb-16">
       <header className="flex items-center gap-2">
-        <Link href="/" aria-label="Back" className="rounded-lg p-2 hover:bg-zinc-900/5">
+        <Link href="/" aria-label={id.common.back} className="rounded-lg p-2 hover:bg-black/5">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-black">
-          <BookOpen className="h-6 w-6 text-lava" />
-          {en.home.howToPlay}
-        </h1>
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-black">
+            <BookOpen className="h-6 w-6 text-lava" />
+            {id.howTo.title}
+          </h1>
+          <p className="text-xs font-bold text-zinc-500">{id.howTo.subtitle}</p>
+        </div>
       </header>
 
-      <Section title="Your Mission">
-        <p>
-          You are the <strong>Guardian Wildlife (Satwa Penjaga)</strong> — animal heroes of the Ring
-          of Fire. Nature is getting angry, and wild rumors spread even faster than the lava. As one
-          team you must <strong>filter real news from hoaxes</strong> and{" "}
-          <strong>escort villagers to the Safe Zones</strong>. Everyone wins together — or loses
-          together!
-        </p>
-      </Section>
-
-      <Section title="How to Win (and Lose)">
-        <ul className="list-disc space-y-1 pl-5">
-          <li>
-            <strong>Win:</strong> evacuate <strong>8 of the 15 villagers</strong> to a Safe Zone
-            before the Disaster Deck runs out.
-          </li>
-          <li>
-            <strong>Lose — Panic:</strong> the Panic Meter reaches 5. Nobody trusts you anymore.
-          </li>
-          <li>
-            <strong>Lose — Casualties:</strong> so many villagers are lost that the target can no
-            longer be reached.
-          </li>
-          <li>
-            <strong>Lose — Time Out:</strong> the last Disaster Card is drawn before you hit the
-            target. The megathrust arrives…
-          </li>
-        </ul>
-      </Section>
-
-      <Section title="One Round = 4 Phases">
-        <ol className="list-decimal space-y-2 pl-5">
-          <li>
-            <strong>Incoming Crisis</strong> — a news card appears and a Crisis token drops on the
-            map. Villagers there start panicking. Is the news real? Nobody knows yet!
-          </li>
-          <li>
-            <strong>Filter Hoax vs. Fact</strong> — discuss as a team! Each news card has locks
-            (WHAT / WHERE / WHY / WHO / HOW). Play <em>one matching Evidence Card</em> to open a lock
-            and reveal the truth. The 3-star <strong>Official Confirmation</strong> card is a
-            wildcard that opens any lock. Skipping (or having no matching evidence) means the rumor
-            spreads: <strong>Panic +1</strong>.
-          </li>
-          <li>
-            <strong>Rescue Action</strong> — each Guardian gets <strong>3 Action Points (AP)</strong>
-            : Move (1 AP), Calm a panicked villager (2 AP), or Escort a calm villager to an adjacent
-            tile (1 AP). Get them to a Safe Zone!
-          </li>
-          <li>
-            <strong>The Ring of Fire&apos;s Wrath</strong> — draw a Disaster Card. Its effect twists
-            the <em>next</em> round, and some disasters destroy a tile — villagers left there are
-            lost. Then a new round begins.
-          </li>
-        </ol>
-      </Section>
-
-      <Section title="Evidence Cards Are Dual-Use!">
-        <p>
-          Every Evidence Card can be played <strong>two ways</strong> — use it to{" "}
-          <strong>verify</strong> the news (open a lock), or <strong>discard</strong> it for a
-          resource boost (+2 AP, a free calm, a card trade, and more). You can&apos;t do both, so
-          choose wisely — that&apos;s the heart of the game.
-        </p>
-      </Section>
-
-      <Section title="The Guardians">
-        <ul className="space-y-2">
-          {roles.map((r) => (
-            <li key={r.id} className="flex gap-2">
-              <span className="text-2xl">{roleEmoji[r.id]}</span>
-              <span>
-                <strong>
-                  {r.name} — {r.nickname}.
-                </strong>{" "}
-                {r.ability}
-              </span>
+      {/* Tujuan */}
+      <Section title={s.goal.title} icon={<Target className="h-4 w-4" />}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.goal.body}</p>
+        <ul className="mt-2 space-y-1">
+          {s.goal.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+              {b}
             </li>
           ))}
         </ul>
       </Section>
 
-      <Section title="Pass-and-Play Tips">
-        <ul className="list-disc space-y-1 pl-5">
-          <li>Play on one device — pass it around like a board game.</li>
-          <li>
-            In the verification phase, tap a player&apos;s tab to peek at <em>their</em> cards —
-            only they should look!
-          </li>
-          <li>The 1-minute timer keeps the discussion spicy. Decide before it runs out!</li>
+      {/* Papan */}
+      <Section title={s.board.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.board.body}</p>
+        <RingDiagram />
+        <ul className="mt-2 space-y-1">
+          {s.board.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+              {b}
+            </li>
+          ))}
         </ul>
       </Section>
 
-      <Section title="Glossary">
-        <p className="text-sm">{en.glossary.bmkg}</p>
+      {/* 5 fase */}
+      <Section title={s.loop.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.loop.body}</p>
+        <ol className="mt-2 space-y-1.5">
+          {PHASE_ORDER.map((p) => (
+            <li
+              key={p}
+              className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
+            >
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lava text-sm font-black text-white">
+                {id.phases[p].num}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-black">{id.phases[p].name}</span>
+                <span className="block text-[12px] leading-snug text-zinc-600">
+                  {id.phases[p].hint}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
       </Section>
+
+      {/* Fase 3 — biaya AP */}
+      <Section title={s.turns.title} icon={<Zap className="h-4 w-4" />}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.turns.body}</p>
+        <ul className="mt-2 divide-y divide-zinc-200 overflow-hidden rounded-xl border-2 border-zinc-200 bg-white">
+          {s.turns.costs.map((c) => (
+            <li key={c.action} className="flex items-start justify-between gap-3 p-2">
+              <span className="text-[13px] font-bold">{c.action}</span>
+              <span className="shrink-0 text-[12px] font-black text-amber-700">{c.cost}</span>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      {/* Commit & Flip */}
+      <Section title={s.commitFlip.title} icon={<Gavel className="h-4 w-4" />}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.commitFlip.body}</p>
+        <ol className="mt-2 space-y-2">
+          {s.commitFlip.steps.map((step) => (
+            <li key={step.title} className="rounded-xl border-l-4 border-lava bg-white p-2.5">
+              <p className="text-sm font-black">{step.title}</p>
+              <p className="text-[13px] leading-snug text-zinc-600">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+
+        <div className="mt-3 space-y-2">
+          <OutcomeBanner outcome="terverifikasi" />
+          <OutcomeBanner outcome="tebakan_beruntung" />
+          <OutcomeBanner outcome="hoaks_menyebar" />
+        </div>
+
+        <p className="mt-3 rounded-xl bg-zinc-100 p-2.5 text-[13px] font-bold leading-snug text-zinc-700">
+          {s.commitFlip.note}
+        </p>
+      </Section>
+
+      {/* Table Talk Protocol */}
+      <Section title={id.tableTalk.title} icon={<Users className="h-4 w-4" />}>
+        <p className="text-sm font-bold italic text-violet-800">{id.tableTalk.lead}</p>
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <ul className="space-y-1 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-2.5">
+            <li className="text-[11px] font-black uppercase tracking-wide text-emerald-700">
+              {id.tableTalk.allowed}
+            </li>
+            {id.tableTalk.allowedItems.map((item) => (
+              <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
+                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                {item}
+              </li>
+            ))}
+          </ul>
+          <ul className="space-y-1 rounded-xl border-2 border-red-200 bg-red-50 p-2.5">
+            <li className="text-[11px] font-black uppercase tracking-wide text-red-700">
+              {id.tableTalk.forbidden}
+            </li>
+            {id.tableTalk.forbiddenItems.map((item) => (
+              <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
+                <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <p className="mt-2 rounded-xl bg-violet-50 p-2.5 text-[13px] leading-snug text-violet-900">
+          {id.tableTalk.why}
+        </p>
+      </Section>
+
+      {/* Evidence */}
+      <Section title={s.evidence.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.evidence.body}</p>
+        <ul className="mt-2 space-y-1">
+          {s.evidence.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+              {b}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      {/* Peran */}
+      <Section title={s.roles.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.roles.body}</p>
+        <ul className="mt-2 space-y-2">
+          {roles.map((role) => (
+            <li key={role.id} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
+              <p className="flex items-center gap-2 text-sm font-black">
+                <span className="text-xl leading-none">{emojiForRole(role.id)}</span>
+                {role.name}
+                <span className="text-[11px] font-bold text-zinc-400">{role.title}</span>
+              </p>
+              <p className="mt-1 text-[12px] leading-snug text-zinc-700">
+                <b>{id.role.passive}</b> · {role.passiveName}: {role.passive}
+              </p>
+              <p className="text-[12px] leading-snug text-violet-800">
+                <b>{id.role.active}</b> · {role.activeName}: {role.active}
+              </p>
+              <p className="text-[12px] leading-snug text-amber-800">
+                <b>{id.role.subMission}</b> · {role.subMissionName}: {role.subMission}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      {/* Ekonomi */}
+      <Section title={s.economy.title}>
+        <ul className="space-y-1">
+          {s.economy.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+              {b}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      {/* Kesulitan */}
+      <Section title={s.difficulty.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.difficulty.body}</p>
+        <ul className="mt-2 space-y-1.5">
+          {(Object.keys(gameConfig.difficulties) as DifficultyId[]).map((key) => {
+            const d = gameConfig.difficulties[key];
+            return (
+              <li key={key} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
+                <p className="text-sm font-black">{d.name}</p>
+                <p className="text-[12px] text-zinc-500">{d.blurb}</p>
+                <p className="mt-1 flex flex-wrap gap-x-3 text-[12px] font-bold text-zinc-700">
+                  <span>
+                    {id.setup.difficultyStats.target}: {d.targetEvacuation}
+                  </span>
+                  <span>
+                    {id.setup.difficultyStats.panic}: {d.panicMeterMax}
+                  </span>
+                  <span>
+                    {id.setup.difficultyStats.deck}: {d.disasterDeckSize}
+                  </span>
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      </Section>
+
+      {/* Catatan demo */}
+      <Section title={s.demo.title}>
+        <p className="text-sm leading-relaxed text-zinc-700">{s.demo.body}</p>
+      </Section>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Link href="/setup" className="flex-1">
+          <Button className="w-full">
+            <Play className="mr-2 inline h-5 w-5" />
+            {id.howTo.startNow}
+          </Button>
+        </Link>
+        <Link href="/" className="flex-1">
+          <Button variant="secondary" className="w-full">
+            {id.howTo.backHome}
+          </Button>
+        </Link>
+      </div>
     </main>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <section className="rounded-2xl border-2 border-zinc-200 bg-white p-4">
-      <h2 className="mb-2 text-lg font-black text-lava">{title}</h2>
-      <div className="space-y-2 text-sm leading-relaxed text-zinc-700">{children}</div>
+    <section>
+      <h2 className="mb-1.5 flex items-center gap-1.5 text-lg font-black text-lava">
+        {icon}
+        {title}
+      </h2>
+      {children}
     </section>
+  );
+}
+
+/** Diagram cincin yang identik dengan papan asli — 28 ubin + 4 Rute Laut. */
+function RingDiagram() {
+  return (
+    <figure className="my-3 overflow-hidden rounded-2xl bg-gradient-to-b from-[#12293b] to-[#07141f] p-2">
+      <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="mx-auto w-full max-w-sm" role="img" aria-label={id.board.title}>
+        <circle cx={CENTRE} cy={CENTRE} r={RING_RADIUS - 200} fill="#0b2233" stroke="#1d4a63" strokeWidth={3} />
+        {SEA_ROUTES.map(([a, b]) => (
+          <path
+            key={`${a}-${b}`}
+            d={seaRoutePath(a, b, RING_SIZE)}
+            fill="none"
+            stroke="#7B4FA8"
+            strokeWidth={7}
+            strokeLinecap="round"
+            strokeDasharray="20 14"
+          />
+        ))}
+        {Array.from({ length: RING_SIZE }).map((_, i) => (
+          <g key={i}>
+            <polygon
+              points={tileHexPoints(i, RING_SIZE)}
+              fill={POS_SIAGA.includes(i) ? "#2B2F38" : SECTOR_COLOR[sectorOf(i)]}
+              stroke="#00000055"
+              strokeWidth={3}
+            />
+          </g>
+        ))}
+      </svg>
+      <figcaption className="mt-1 flex flex-wrap justify-center gap-2 text-[10px] font-bold text-sky-100/80">
+        {(["merah", "teal", "kuning", "biru"] as const).map((sid) => (
+          <span key={sid} className="inline-flex items-center gap-1">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-sm"
+              style={{ backgroundColor: SECTOR_COLOR[sid] }}
+            />
+            {id.board.sectorCue[sid]}
+          </span>
+        ))}
+        <span className="inline-flex items-center gap-1">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[#2B2F38] ring-1 ring-white/40" />
+          {id.board.posSiaga}
+        </span>
+        <span className={cn("inline-flex items-center gap-1")}>
+          <span className="inline-block h-0.5 w-4 bg-sea" />
+          {id.board.seaRoute}
+        </span>
+      </figcaption>
+    </figure>
   );
 }

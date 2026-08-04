@@ -1,33 +1,56 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Flag, Flame, HandHelping, Home as HomeIcon, Sparkles, Wind } from "lucide-react";
-import type { EvidenceCard } from "@/engine/types";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Flame,
+  HandHelping,
+  Newspaper,
+  Search,
+  Wind,
+} from "lucide-react";
+import type { EvidenceCard, EvidenceCategory, VillagerToken } from "@/engine/types";
 import { useGameStore } from "@/store/gameStore";
-import { scenarioById } from "@/data/scenarios";
+import { scenarios } from "@/data/scenarios";
 import { roleById } from "@/data/roles";
-import { adjacentIndices, calmCost, escortCost, isPassable, moveCost } from "@/engine/rules";
+import { gameConfig } from "@/data/gameConfig";
+
 import { useHydrated } from "@/lib/useHydrated";
-import { MapGrid } from "@/components/board/MapGrid";
-import { PanicMeter } from "@/components/hud/PanicMeter";
-import { DisasterDeckCounter } from "@/components/hud/DisasterDeckCounter";
-import { APCounter } from "@/components/hud/APCounter";
-import { PhaseIndicator } from "@/components/hud/PhaseIndicator";
-import { EventCardDisplay } from "@/components/cards/EventCardDisplay";
-import { EvidenceCardHand } from "@/components/cards/EvidenceCardHand";
+import {
+  calmCost,
+  escortGroupLimit,
+  handLimit,
+  legalMoves,
+  type MoveOption,
+} from "@/lib/engineBridge";
+import { cn } from "@/lib/utils";
+import { id } from "@/lib/i18n/id";
+import { emojiForRole } from "@/lib/roleEmoji";
+
+import { RingBoard } from "@/components/board/RingBoard";
+import { CrisisZoneCentre } from "@/components/board/CrisisZoneCentre";
+import { TileInspector } from "@/components/board/TileInspector";
+import { GameHud } from "@/components/hud/GameHud";
+import { PhaseIndicator, isRoundPhase } from "@/components/hud/PhaseIndicator";
 import { DisasterCardReveal } from "@/components/cards/DisasterCardReveal";
-import { Phase2Timer } from "@/components/Phase2Timer";
-import { TradeModal } from "@/components/TradeModal";
+import { NewsCardDisplay } from "@/components/cards/NewsCardDisplay";
+import { EvidenceCardHand } from "@/components/cards/EvidenceCardHand";
+import { VerdictPanel } from "@/components/cards/VerdictPanel";
+import { ChaosCardDisplay } from "@/components/cards/ChaosCardDisplay";
+import { RewardShop } from "@/components/RewardShop";
+import { RolePanel } from "@/components/RolePanel";
+import { TableTalkNote } from "@/components/TableTalkNote";
+import { DiscussionTimer } from "@/components/DiscussionTimer";
+import { BarterModal } from "@/components/BarterModal";
+import { ActiveAbilityModal } from "@/components/ActiveAbilityModal";
 import { PeekModal } from "@/components/PeekModal";
 import { GameOverModal } from "@/components/GameOverModal";
 import { LogPanel } from "@/components/LogPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { Button } from "@/components/ui/Button";
-import { cn } from "@/lib/utils";
-import { en } from "@/lib/i18n/en";
-import { roleEmoji } from "@/lib/roleEmoji";
 
 export default function PlayPage() {
   const state = useGameStore((s) => s.state);
@@ -35,143 +58,195 @@ export default function PlayPage() {
   const router = useRouter();
   const mounted = useHydrated();
 
-  // Local UI state (never part of the game engine)
+  // — State UI lokal, tidak pernah masuk engine —
   const [selectedTile, setSelectedTile] = useState<number | null>(null);
-  const [escortVillagerId, setEscortVillagerId] = useState<string | null>(null);
-  const [handPlayerId, setHandPlayerId] = useState<string | null>(null);
+  const [escortIds, setEscortIds] = useState<string[]>([]);
   const [handRevealed, setHandRevealed] = useState(false);
-  const [cardsOpen, setCardsOpen] = useState(false);
-  const [trade, setTrade] = useState<{ playerId: string; card: EvidenceCard } | null>(null);
+  const [handPlayerId, setHandPlayerId] = useState<string | null>(null);
+  const [barterCard, setBarterCard] = useState<EvidenceCard | null>(null);
+  const [abilityOpen, setAbilityOpen] = useState(false);
 
   useEffect(() => {
     if (mounted && !state) router.replace("/");
   }, [mounted, state, router]);
 
-  const phase = state?.phase;
-  const hasEvent = !!state?.activeEventCard;
-  useEffect(() => {
-    if (phase === "phase1_influx" && !hasEvent) dispatch({ type: "DRAW_EVENT_CARD" });
-  }, [phase, hasEvent, dispatch]);
-
-  // Reset transient UI state whenever the phase/round changes (during render,
-  // per the React "adjusting state when props change" pattern — no effect needed)
-  const [prevPhaseKey, setPrevPhaseKey] = useState<string | null>(null);
-  const phaseKey = state ? `${state.phase}-${state.round}` : null;
-  if (phaseKey !== prevPhaseKey) {
-    setPrevPhaseKey(phaseKey);
+  // Reset state transien saat fase/ronde berganti — pola "adjust state during
+  // render", tanpa effect.
+  const [prevKey, setPrevKey] = useState<string | null>(null);
+  const phaseKey = state ? `${state.phase}-${state.round}-${state.currentPlayerIndex}` : null;
+  if (phaseKey !== prevKey) {
+    setPrevKey(phaseKey);
     setSelectedTile(null);
-    setEscortVillagerId(null);
+    setEscortIds([]);
     setHandRevealed(false);
-    setCardsOpen(false);
+    setBarterCard(null);
+    setAbilityOpen(false);
   }
 
-  const scenario = state ? scenarioById[state.scenarioId] : null;
-  const current = state ? state.players[state.currentPlayerIndex] : null;
+  const scenario = state ? scenarios.find((s) => s.id === state.scenarioId) ?? null : null;
+  const current = state ? (state.players[state.currentPlayerIndex] ?? null) : null;
 
-  const moveTargets = useMemo(() => {
-    if (!state || !current || state.phase !== "phase3_evacuation") return [];
-    return adjacentIndices(current.position, scenario!.cols, scenario!.rows).filter((i) =>
-      isPassable(state.tiles[i])
-    );
-  }, [state, current, scenario]);
+  const isTurnPhase = state?.phase === "p3_turns";
+
+  const moves = useMemo<MoveOption[]>(() => {
+    if (!state || !current || !isTurnPhase) return [];
+    return legalMoves(state, current);
+  }, [state, current, isTurnPhase]);
 
   if (!mounted || !state || !scenario || !current) return null;
 
-  const handPlayer = state.players.find((p) => p.id === handPlayerId) ?? state.players[0];
+  const role = roleById[current.roleId];
+  const cCost = calmCost(state);
+  // Biaya kawal termurah dari ubin ini — label indikatif; reducer tetap yang
+  // menghitung biaya sebenarnya untuk ubin tujuan yang dipilih.
+  const eCost = moves.length
+    ? Math.min(...moves.map((m) => m.escortCost))
+    : gameConfig.escortCost;
+  const escortLimit = escortGroupLimit(current, false);
 
-  const onTileClick = (index: number) => {
-    if (state.phase === "phase3_evacuation" && escortVillagerId && moveTargets.includes(index)) {
-      // Let the reducer decide — if the escort is blocked (e.g. Liquefaction),
-      // it logs the reason so the player gets feedback instead of a silent no-op.
+  const handPlayer =
+    state.players.find((p) => p.id === handPlayerId) ?? current;
+
+  const newsSectorName = state.activeNews
+    ? scenario.sectors.find((s) => s.id === state.activeNews?.targetSectorId)?.name
+    : undefined;
+
+  const allEnded =
+    state.playersEndedTurn.length >= state.players.length && state.players.length > 0;
+
+  // ——— Interaksi papan ———————————————————————————————————————————
+
+  const moveFor = (index: number): MoveOption | null =>
+    moves.find((m) => m.index === index) ?? null;
+
+  const onSelectTile = (index: number) => {
+    const move = moveFor(index);
+
+    // Mode kawal: ketukan berikutnya adalah ubin tujuan.
+    if (escortIds.length > 0 && move) {
       dispatch({
         type: "ESCORT_VILLAGER",
         playerId: current.id,
-        villagerId: escortVillagerId,
+        villagerIds: escortIds,
         targetTileIndex: index,
+        viaSeaRoute: move.viaSeaRoute,
       });
-      setEscortVillagerId(null);
+      setEscortIds([]);
       setSelectedTile(null);
       return;
     }
-    setSelectedTile(selectedTile === index ? null : index);
-    setEscortVillagerId(null);
+
+    setSelectedTile((prev) => (prev === index ? null : index));
   };
 
-  const verifyWith = (card: EvidenceCard) => {
-    dispatch({ type: "USE_EVIDENCE_FOR_VERIFICATION", playerId: handPlayer.id, evidenceId: card.id });
+  const onMove = (m: MoveOption) => {
+    dispatch({
+      type: "MOVE_PLAYER",
+      playerId: current.id,
+      targetTileIndex: m.index,
+      viaSeaRoute: m.viaSeaRoute,
+    });
+    setSelectedTile(null);
   };
 
-  const discardFor = (playerId: string) => (card: EvidenceCard) => {
-    if (card.resourceKind === "trade") {
-      setTrade({ playerId, card });
-      return;
-    }
-    dispatch({ type: "DISCARD_EVIDENCE_FOR_RESOURCE", playerId, evidenceId: card.id });
-  };
+  const onCalm = (villager: VillagerToken) =>
+    dispatch({ type: "CALM_VILLAGER", playerId: current.id, villagerId: villager.id });
+
+  const onToggleEscort = (villager: VillagerToken) =>
+    setEscortIds((prev) =>
+      prev.includes(villager.id)
+        ? prev.filter((v) => v !== villager.id)
+        : [...prev, villager.id].slice(-escortLimit)
+    );
+
+  const onPlayLock = (playerId: string) => (card: EvidenceCard, lock: EvidenceCategory) =>
+    dispatch({ type: "PLAY_EVIDENCE_LOCK", playerId, evidenceId: card.id, lock });
+
+  const onDiscard = (card: EvidenceCard) =>
+    dispatch({ type: "DISCARD_FOR_RESOURCE", playerId: current.id, evidenceId: card.id });
 
   const selected = selectedTile !== null ? state.tiles[selectedTile] : null;
-  const selectedIsAdjacent = selectedTile !== null && moveTargets.includes(selectedTile);
-  const fromTile = state.tiles[current.position];
-  const mCost = moveCost(state, fromTile, current);
-  const cCost = calmCost(state);
-  const eCost = state.tigerEscortBonus[current.id]
-    ? Math.max(0, escortCost(state, fromTile, current) - 1)
-    : escortCost(state, fromTile, current);
-  const role = roleById[current.roleId];
-  const abilityActive = ["peek_disaster", "peek_event", "cancel_panic"].includes(role.abilityType);
 
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-2.5 p-3 pb-10 lg:max-w-5xl">
-      {/* HUD */}
-      <header className="space-y-2 rounded-2xl border border-zinc-200 bg-white/80 p-2.5">
-        <div className="flex items-center gap-2 text-sm font-black">
-          <Link href="/" aria-label={en.gameOver.backHome} className="rounded-lg p-1 hover:bg-zinc-900/5">
-            <HomeIcon className="h-4 w-4 text-zinc-400" />
-          </Link>
-          <Flame className="h-4 w-4 text-lava" />
-          <span>
-            {en.hud.round} {state.round}
-          </span>
-          <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800">
-            <Flag className="h-3.5 w-3.5" />
-            {en.hud.evacuated}: {state.evacuees.length}/{scenario.targetEvacuation}
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <PanicMeter value={state.panicMeter} max={state.panicMeterMax} />
-          <DisasterDeckCounter
-            remaining={state.disasterDeck.length}
-            total={scenario.disasterDeckSize}
-            bigThreat={state.activeDisasterEffect?.roundEffectKey === "peek_disaster"}
-          />
-        </div>
-      </header>
-
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-2.5 p-3 pb-10 lg:max-w-6xl">
+      <GameHud state={state} scenario={scenario} />
       <PhaseIndicator phase={state.phase} />
 
-      {/* Active disaster round effect */}
-      {state.activeDisasterEffect && state.phase !== "phase4_escalation" && (
-        <p className="flex items-start gap-1.5 rounded-xl border-2 border-amber-300 bg-amber-50 p-2 text-xs font-bold text-amber-900">
+      {isRoundPhase(state.phase) && (
+        <p className="px-1 text-center text-[11px] font-bold leading-snug text-zinc-500">
+          {id.phases[state.phase].hint}
+        </p>
+      )}
+
+      {/* Dampak Kejadian bencana aktif */}
+      {state.activeDisaster && state.phase !== "p1_disaster" && (
+        <p className="flex items-start gap-1.5 rounded-xl border-2 border-amber-300 bg-amber-50 p-2 text-[11px] font-bold leading-snug text-amber-900">
           <Wind className="mt-0.5 h-4 w-4 shrink-0" />
-          {state.activeDisasterEffect.title} — {state.activeDisasterEffect.roundEffect}
+          <span>
+            <b>{state.activeDisaster.title}</b> — {state.activeDisaster.roundEffect}
+          </span>
         </p>
       )}
 
       <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start">
-        {/* Map */}
+        {/* ——— Papan cincin ——— */}
         <section className="lg:flex-1">
-          <MapGrid
+          <RingBoard
             state={state}
+            scenario={scenario}
             selectedTile={selectedTile}
-            moveTargets={state.phase === "phase3_evacuation" ? moveTargets : []}
-            onTileClick={onTileClick}
+            moveOptions={moves}
+            onSelectTile={onSelectTile}
+            centre={
+              <CrisisZoneCentre
+                disaster={state.activeDisaster}
+                news={state.activeNews}
+                panic={state.panicMeter}
+                panicMax={state.panicMeterMax}
+              />
+            }
           />
+
+          {escortIds.length > 0 && (
+            <p className="mt-2 rounded-xl bg-violet-100 p-2 text-center text-xs font-bold text-violet-900">
+              <HandHelping className="mr-1 inline h-4 w-4" />
+              {escortIds.length} {id.actions.escortSelected} — {id.actions.escortHint}{" "}
+              <button type="button" className="underline" onClick={() => setEscortIds([])}>
+                {id.common.cancel}
+              </button>
+            </p>
+          )}
+
+          {/* Chaos menumpuk sepanjang permainan, jadi selalu terlihat —
+              bukan cuma di Fase 5 saat kartunya ditarik. */}
+          {state.activeChaos.length > 0 && (
+            <div className="mt-2">
+              <ChaosCardDisplay activeChaos={state.activeChaos} />
+            </div>
+          )}
+
+          {selected && (
+            <div className="mt-2">
+              <TileInspector
+                state={state}
+                scenario={scenario}
+                tile={selected}
+                current={current}
+                move={moveFor(selected.index)}
+                calmCost={cCost}
+                escortCost={eCost}
+                canAct={isTurnPhase}
+                escortSelection={escortIds}
+                onMove={onMove}
+                onCalm={onCalm}
+                onToggleEscort={onToggleEscort}
+              />
+            </div>
+          )}
         </section>
 
-        {/* Phase panel */}
-        <section className="lg:w-96 lg:shrink-0">
-          {/* No mode="wait": the new phase panel must mount immediately even if
-              the exit animation can't run (e.g. backgrounded tab pauses rAF). */}
+        {/* ——— Panel fase ——— */}
+        <section className="lg:w-[26rem] lg:shrink-0">
           <AnimatePresence initial={false}>
             <motion.div
               key={state.phase}
@@ -181,50 +256,139 @@ export default function PlayPage() {
               transition={{ duration: 0.25 }}
               className="space-y-2.5"
             >
-              <p className="text-center text-xs font-bold text-zinc-500">
-                {state.phase !== "game_over" &&
-                  state.phase !== "setup" &&
-                  en.phases[state.phase as keyof typeof en.phases]?.hint}
-              </p>
-
-              {/* ——— Phase 1: Incoming Crisis ——— */}
-              {state.phase === "phase1_influx" && state.activeEventCard && (
-                <>
-                  <EventCardDisplay
-                    card={state.activeEventCard}
-                    locksOpened={state.activeEventLocksOpened}
-                    outcome={state.activeEventOutcome}
-                  />
-                  <Button className="w-full" onClick={() => dispatch({ type: "ADVANCE_PHASE" })}>
-                    {en.actions.continueBtn} <ArrowRight className="ml-1 inline h-4 w-4" />
+              {/* ——— FASE 1 — Murka Cincin Api ——— */}
+              {state.phase === "p1_disaster" &&
+                (state.activeDisaster ? (
+                  <>
+                    <DisasterCardReveal card={state.activeDisaster} />
+                    <Button className="w-full" onClick={() => dispatch({ type: "ADVANCE_PHASE" })}>
+                      {id.common.continue} <ArrowRight className="ml-1 inline h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    className="panic-pulse w-full text-lg"
+                    onClick={() => dispatch({ type: "DRAW_DISASTER" })}
+                  >
+                    <Flame className="mr-2 inline h-5 w-5" />
+                    {id.actions.drawDisaster}
                   </Button>
-                </>
+                ))}
+
+              {/* ——— FASE 2 — Kabar Mengudara ——— */}
+              {state.phase === "p2_news" &&
+                (state.activeNews ? (
+                  <>
+                    <NewsCardDisplay
+                      card={state.activeNews}
+                      locksOpened={state.locksOpened}
+                      revealed={false}
+                      sectorName={newsSectorName}
+                    />
+                    <Button className="w-full" onClick={() => dispatch({ type: "ADVANCE_PHASE" })}>
+                      {id.common.continue} <ArrowRight className="ml-1 inline h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <Button className="w-full text-lg" onClick={() => dispatch({ type: "DRAW_NEWS" })}>
+                    <Newspaper className="mr-2 inline h-5 w-5" />
+                    {id.actions.drawNews}
+                  </Button>
+                ))}
+
+              {/* ——— FASE 3 — Giliran Pemain ——— */}
+              {state.phase === "p3_turns" && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <TurnOrder
+                      names={state.players.map((p) => ({
+                        id: p.id,
+                        name: p.name,
+                        roleId: p.roleId,
+                        done: state.playersEndedTurn.includes(p.id),
+                        active: p.id === current.id,
+                      }))}
+                    />
+                    <DiscussionTimer resetKey={`${state.round}-${state.currentPlayerIndex}`} />
+                  </div>
+
+                  <TableTalkNote />
+
+                  <RolePanel
+                    player={current}
+                    role={role}
+                    isCurrent
+                    onUseActive={() => setAbilityOpen(true)}
+                  />
+
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      variant="secondary"
+                      className="flex-1 text-xs"
+                      disabled={current.ap < gameConfig.investigateCost}
+                      onClick={() => dispatch({ type: "INVESTIGATE", playerId: current.id })}
+                    >
+                      <Search className="mr-1 inline h-3.5 w-3.5" />
+                      {id.actions.investigate} ({gameConfig.investigateCost} {id.common.ap})
+                    </Button>
+                    <Button
+                      className="flex-1 text-xs"
+                      onClick={() => dispatch({ type: "END_PLAYER_TURN" })}
+                    >
+                      {id.actions.endTurn}
+                    </Button>
+                  </div>
+
+                  {state.tiles[current.position]?.isPosSiaga && (
+                    <p className="rounded-xl bg-emerald-50 p-2 text-[11px] font-bold leading-snug text-emerald-800">
+                      {id.actions.posSiagaBonus}
+                    </p>
+                  )}
+
+                  <HandSection
+                    revealed={handRevealed}
+                    onToggle={() => setHandRevealed(!handRevealed)}
+                    limit={handLimit(state, current)}
+                    count={current.hand.length}
+                  >
+                    <EvidenceCardHand
+                      state={state}
+                      player={current}
+                      canAct
+                      onPlayLock={onPlayLock(current.id)}
+                      onDiscard={onDiscard}
+                      onBarter={setBarterCard}
+                    />
+                  </HandSection>
+
+                  {allEnded && (
+                    <Button
+                      variant="safe"
+                      className="w-full"
+                      onClick={() => dispatch({ type: "ADVANCE_PHASE" })}
+                    >
+                      {id.actions.toVerdict} <ArrowRight className="ml-1 inline h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               )}
 
-              {/* ——— Phase 2: Verification ——— */}
-              {state.phase === "phase2_verification" && state.activeEventCard && (
-                <>
-                  <div className="flex items-center justify-between">
-                    <Phase2Timer resetKey={state.round} />
-                    {state.activeEventOutcome === "pending" && (
-                      <Button
-                        variant="secondary"
-                        className="text-sm"
-                        onClick={() => dispatch({ type: "RESOLVE_VERIFICATION" })}
-                      >
-                        {en.verification.skip}
-                      </Button>
-                    )}
-                  </div>
-                  <EventCardDisplay
-                    card={state.activeEventCard}
-                    locksOpened={state.activeEventLocksOpened}
-                    outcome={state.activeEventOutcome}
+              {/* ——— FASE 4 — Sidang Fakta (Commit & Flip) ——— */}
+              {state.phase === "p4_verdict" && state.activeNews && (
+                <div className="space-y-2.5">
+                  <TableTalkNote />
+
+                  <VerdictPanel
+                    state={state}
+                    card={state.activeNews}
+                    sectorName={newsSectorName}
+                    dispatch={dispatch}
                   />
-                  {state.activeEventOutcome === "pending" ? (
-                    <div className="rounded-2xl border border-zinc-200 bg-white/80 p-2.5">
-                      <p className="mb-1.5 text-xs font-black uppercase text-zinc-500">
-                        {en.verification.whoseCards}
+
+                  {!state.verdict && (
+                    <div className="rounded-2xl border-2 border-zinc-200 bg-white p-2.5">
+                      <p className="mb-1.5 text-[10px] font-black uppercase tracking-wide text-zinc-500">
+                        {id.evidence.whoseHand}
                       </p>
                       <div className="mb-2 flex flex-wrap gap-1.5">
                         {state.players.map((p) => (
@@ -235,6 +399,7 @@ export default function PlayPage() {
                               setHandPlayerId(p.id);
                               setHandRevealed(false);
                             }}
+                            aria-pressed={handPlayer.id === p.id}
                             className={cn(
                               "min-h-11 rounded-xl border-2 px-2.5 text-sm font-bold",
                               handPlayer.id === p.id
@@ -242,193 +407,71 @@ export default function PlayPage() {
                                 : "border-zinc-200 bg-white"
                             )}
                           >
-                            {roleEmoji[p.roleId]} {p.name}
+                            {emojiForRole(p.roleId)} {p.name}
                           </button>
                         ))}
                       </div>
-                      {handRevealed ? (
-                        <>
-                          <button
-                            type="button"
-                            className="mb-2 w-full text-right text-xs font-bold text-zinc-400"
-                            onClick={() => setHandRevealed(false)}
-                          >
-                            {en.verification.hide}
-                          </button>
-                          <EvidenceCardHand
-                            state={state}
-                            player={handPlayer}
-                            onVerify={verifyWith}
-                            onDiscard={discardFor(handPlayer.id)}
-                          />
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setHandRevealed(true)}
-                          className="min-h-11 w-full rounded-xl border-2 border-dashed border-violet-300 bg-violet-50 p-3 text-sm font-bold text-violet-700"
-                        >
-                          {en.verification.reveal}
-                        </button>
-                      )}
+
+                      <HandSection
+                        revealed={handRevealed}
+                        onToggle={() => setHandRevealed(!handRevealed)}
+                        limit={handLimit(state, handPlayer)}
+                        count={handPlayer.hand.length}
+                      >
+                        <EvidenceCardHand
+                          state={state}
+                          player={handPlayer}
+                          canAct
+                          onPlayLock={onPlayLock(handPlayer.id)}
+                        />
+                      </HandSection>
                     </div>
-                  ) : (
-                    <Button variant="safe" className="w-full" onClick={() => dispatch({ type: "ADVANCE_PHASE" })}>
-                      {en.verification.continueToRescue} <ArrowRight className="ml-1 inline h-4 w-4" />
+                  )}
+
+                  {state.newsRevealed && (
+                    <Button
+                      variant="safe"
+                      className="w-full"
+                      onClick={() => dispatch({ type: "ADVANCE_PHASE" })}
+                    >
+                      {id.actions.toImpact} <ArrowRight className="ml-1 inline h-4 w-4" />
                     </Button>
-                  )}
-                </>
-              )}
-
-              {/* ——— Phase 3: Rescue Action ——— */}
-              {state.phase === "phase3_evacuation" && (
-                <div className="space-y-2.5">
-                  <div className="rounded-2xl border-2 border-safe bg-emerald-50 p-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{roleEmoji[current.roleId]}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-black">
-                          {current.name}
-                          <span className="ml-1 text-xs font-bold text-zinc-500">
-                            ({en.actions.currentTurn})
-                          </span>
-                        </p>
-                        <p className="text-[11px] leading-tight text-zinc-500">{role.nickname}</p>
-                      </div>
-                      <APCounter ap={current.ap} />
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {abilityActive && (
-                        <Button
-                          variant="secondary"
-                          className="flex-1 text-xs"
-                          disabled={!!state.abilityUsed[current.id]}
-                          onClick={() => dispatch({ type: "USE_ROLE_ABILITY", playerId: current.id })}
-                        >
-                          <Sparkles className="mr-1 inline h-3.5 w-3.5" />
-                          {state.abilityUsed[current.id] ? en.actions.abilityUsed : en.actions.useAbility}
-                        </Button>
-                      )}
-                      <Button
-                        variant="secondary"
-                        className="flex-1 text-xs"
-                        onClick={() => setCardsOpen(!cardsOpen)}
-                      >
-                        {en.actions.cards} ({current.hand.length})
-                      </Button>
-                      <Button className="flex-1 text-xs" onClick={() => dispatch({ type: "END_PLAYER_TURN" })}>
-                        {en.actions.endTurn}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {cardsOpen && (
-                    <EvidenceCardHand
-                      state={state}
-                      player={current}
-                      onVerify={verifyWith}
-                      onDiscard={discardFor(current.id)}
-                    />
-                  )}
-
-                  {escortVillagerId && (
-                    <p className="rounded-xl bg-violet-100 p-2 text-center text-sm font-bold text-violet-800">
-                      <HandHelping className="mr-1 inline h-4 w-4" />
-                      {en.actions.escortHint}{" "}
-                      <button
-                        type="button"
-                        className="underline"
-                        onClick={() => setEscortVillagerId(null)}
-                      >
-                        {en.verification.cancel}
-                      </button>
-                    </p>
-                  )}
-
-                  {/* Contextual actions for the selected tile */}
-                  {selected && !escortVillagerId && (
-                    <div className="space-y-1.5 rounded-2xl border border-zinc-200 bg-white/80 p-2.5">
-                      {selectedIsAdjacent && (
-                        <Button
-                          variant="safe"
-                          className="w-full text-sm"
-                          disabled={current.ap < mCost}
-                          onClick={() => {
-                            dispatch({
-                              type: "MOVE_PLAYER",
-                              playerId: current.id,
-                              targetTileIndex: selectedTile!,
-                            });
-                            setSelectedTile(null);
-                          }}
-                        >
-                          {en.actions.move} ({mCost} {en.hud.ap})
-                        </Button>
-                      )}
-                      {selected.index === current.position &&
-                        selected.occupants.map((v) => (
-                          <div key={v.id} className="flex items-center gap-2 rounded-xl bg-zinc-50 p-1.5">
-                            <span
-                              className={cn(
-                                "text-xs font-black",
-                                v.status === "panic" ? "text-red-600" : "text-emerald-700"
-                              )}
-                            >
-                              {v.status === "panic" ? `😨 ${en.board.panicked}` : `🙂 ${en.board.calm}`}
-                            </span>
-                            <span className="ml-auto flex gap-1.5">
-                              {v.status === "panic" ? (
-                                <Button
-                                  className="text-xs"
-                                  disabled={current.ap < cCost || selected.permanentPanic}
-                                  onClick={() =>
-                                    dispatch({ type: "CALM_VILLAGER", playerId: current.id, villagerId: v.id })
-                                  }
-                                >
-                                  {en.actions.calm} ({cCost} {en.hud.ap})
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="safe"
-                                  className="text-xs"
-                                  disabled={current.ap < eCost}
-                                  onClick={() => setEscortVillagerId(v.id)}
-                                >
-                                  {en.actions.escort} ({eCost} {en.hud.ap})
-                                </Button>
-                              )}
-                            </span>
-                          </div>
-                        ))}
-                      {selected.permanentPanic && (
-                        <p className="text-[11px] font-bold text-red-600">
-                          {en.event.revealed.superstition} — {en.actions.tryAgain}
-                        </p>
-                      )}
-                    </div>
                   )}
                 </div>
               )}
 
-              {/* ——— Phase 4: Escalation ——— */}
-              {state.phase === "phase4_escalation" && (
+              {/* ——— FASE 5 — Dampak & Eskalasi ——— */}
+              {state.phase === "p5_impact" && (
                 <div className="space-y-2.5">
-                  {state.incomingDisaster ? (
-                    <>
-                      <DisasterCardReveal card={state.incomingDisaster} />
-                      <Button className="w-full" onClick={() => dispatch({ type: "ADVANCE_PHASE" })}>
-                        {en.actions.nextRound} <ArrowRight className="ml-1 inline h-4 w-4" />
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      className="panic-pulse w-full text-lg"
-                      onClick={() => dispatch({ type: "DRAW_DISASTER_CARD" })}
-                    >
-                      <Flame className="mr-1 inline h-5 w-5" />
-                      {en.actions.drawDisaster}
-                    </Button>
+                  {state.activeDisaster && (
+                    <p className="rounded-xl border-2 border-red-300 bg-red-50 p-2.5 text-[11px] font-bold leading-snug text-red-900">
+                      <Flame className="mr-1 inline h-4 w-4" />
+                      {id.disaster.endEffect}: {state.activeDisaster.endEffect}
+                    </p>
                   )}
+
+                  {state.activeChaos.length === 0 && (
+                    <ChaosCardDisplay activeChaos={state.activeChaos} />
+                  )}
+                  <RewardShop state={state} dispatch={dispatch} />
+
+                  <div className="space-y-2">
+                    {state.players.map((p) => (
+                      <RolePanel
+                        key={p.id}
+                        player={p}
+                        role={roleById[p.roleId]}
+                        isCurrent={false}
+                      />
+                    ))}
+                  </div>
+
+                  <Button
+                    className="w-full text-base"
+                    onClick={() => dispatch({ type: "ADVANCE_PHASE" })}
+                  >
+                    {id.actions.nextRound} <ArrowRight className="ml-1 inline h-4 w-4" />
+                  </Button>
                 </div>
               )}
             </motion.div>
@@ -439,27 +482,111 @@ export default function PlayPage() {
       <LogPanel log={state.log} />
       <DebugPanel dispatch={dispatch} />
 
-      {/* Modals */}
-      <PeekModal state={state} onClose={() => dispatch({ type: "CLEAR_PEEK" })} />
-      {trade && (
-        <TradeModal
+      {/* Modal */}
+      <PeekModal
+        state={state}
+        scenario={scenario}
+        onClose={() => dispatch({ type: "CLEAR_PEEK" })}
+      />
+      {abilityOpen && role && (
+        <ActiveAbilityModal
           state={state}
-          player={state.players.find((p) => p.id === trade.playerId)!}
-          tradeCard={trade.card}
-          onConfirm={(withId, giveId) => {
+          player={current}
+          role={role}
+          dispatch={dispatch}
+          onClose={() => setAbilityOpen(false)}
+        />
+      )}
+      {barterCard && (
+        <BarterModal
+          state={state}
+          player={current}
+          giveCard={barterCard}
+          onConfirm={(withPlayerId, takeCardId) => {
             dispatch({
-              type: "DISCARD_EVIDENCE_FOR_RESOURCE",
-              playerId: trade.playerId,
-              evidenceId: trade.card.id,
-              tradeWithPlayerId: withId,
-              tradeGiveCardId: giveId,
+              type: "BARTER",
+              playerId: current.id,
+              withPlayerId,
+              giveCardId: barterCard.id,
+              takeCardId,
             });
-            setTrade(null);
+            setBarterCard(null);
           }}
-          onCancel={() => setTrade(null)}
+          onCancel={() => setBarterCard(null)}
         />
       )}
       <GameOverModal state={state} dispatch={dispatch} />
     </main>
+  );
+}
+
+/** Urutan giliran searah jarum jam, dengan penanda siapa yang sudah selesai. */
+function TurnOrder({
+  names,
+}: {
+  names: { id: string; name: string; roleId: string; done: boolean; active: boolean }[];
+}) {
+  return (
+    <ul className="flex min-w-0 flex-wrap gap-1">
+      {names.map((p) => (
+        <li
+          key={p.id}
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full border-2 px-2 py-0.5 text-[11px] font-bold",
+            p.active
+              ? "border-safe bg-emerald-50 text-emerald-900"
+              : p.done
+                ? "border-zinc-200 bg-zinc-100 text-zinc-400 line-through"
+                : "border-zinc-200 bg-white text-zinc-600"
+          )}
+        >
+          <span aria-hidden>{emojiForRole(p.roleId)}</span>
+          <span className="max-w-20 truncate">{p.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Pola privasi "ketuk untuk membuka tangan" — kartu tetap rahasia sampai
+ * pemiliknya sendiri yang membukanya (Table Talk Protocol).
+ */
+function HandSection({
+  revealed,
+  onToggle,
+  count,
+  limit,
+  children,
+}: {
+  revealed: boolean;
+  onToggle: () => void;
+  count: number;
+  limit: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={revealed}
+        className={cn(
+          "flex min-h-11 w-full items-center gap-2 rounded-xl border-2 px-3 text-sm font-bold",
+          revealed
+            ? "border-zinc-200 bg-white text-zinc-500"
+            : "border-dashed border-violet-300 bg-violet-50 text-violet-800"
+        )}
+      >
+        {revealed ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        <span className="min-w-0 flex-1 text-left">
+          {revealed ? id.evidence.hide : id.evidence.reveal}
+        </span>
+        <span className="shrink-0 text-xs tabular-nums text-zinc-400">
+          {count}/{limit}
+        </span>
+      </button>
+      {revealed && children}
+    </div>
   );
 }

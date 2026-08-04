@@ -1,0 +1,336 @@
+"use client";
+import { memo } from "react";
+import type { Player, TileState } from "@/engine/types";
+import {
+  POS_SIAGA_COLOR,
+  POS_SIAGA_EDGE,
+  SECTOR_COLOR,
+  SECTOR_EDGE,
+  SECTOR_GLYPH,
+  SEA_ROUTE_COLOR,
+  CRISIS_COLOR,
+} from "@/lib/theme";
+import { HEX_RADIUS, tileCentre, tileHexPoints } from "@/lib/ring";
+import { emojiForRole } from "@/lib/roleEmoji";
+import { id } from "@/lib/i18n/id";
+
+/**
+ * Ikon bentuk per sektor. Ini isyarat NON-WARNA yang wajib ada supaya sektor
+ * masih bisa dibedakan tanpa persepsi warna (MASTER-SPEC §2 + WCAG 1.4.1).
+ */
+const GLYPH_PATH: Record<string, string> = {
+  // Gunung api meletus — Busur Vulkanik
+  gunung: "M -16 13 L -6 -9 L 6 -9 L 16 13 Z M -6 -9 L -2 -16 M 6 -9 L 3 -17",
+  // Gelombang tsunami — Busur Salju & Tsunami
+  gelombang:
+    "M -17 2 q 8.5 -11 17 0 q 8.5 11 17 0 M -17 11 q 8.5 -11 17 0 q 8.5 11 17 0",
+  // Jajaran puncak — Busur Pegunungan & Gurun
+  puncak: "M -18 13 L -7 -8 L -1 1 L 6 -14 L 18 13 Z",
+  // Pulau vulkanik — Busur Kepulauan Vulkanik
+  pulau: "M -17 10 q 9 -6 17 0 q 8 6 17 0 M -8 2 L 0 -13 L 8 2 Z",
+  // Tenda posko — Pos Siaga
+  pos: "M -15 12 L 0 -13 L 15 12 Z M 0 -13 L 0 12 M 0 -13 L 0 -19 L 10 -16 L 0 -13",
+};
+
+export interface RingTileProps {
+  tile: TileState;
+  ringSize: number;
+  regionName?: string;
+  players: Player[];
+  isSelected: boolean;
+  isMoveTarget: boolean;
+  isSeaTarget: boolean;
+  isNewsTarget: boolean;
+  onSelect: (index: number) => void;
+}
+
+function RingTileImpl({
+  tile,
+  ringSize,
+  regionName,
+  players,
+  isSelected,
+  isMoveTarget,
+  isSeaTarget,
+  isNewsTarget,
+  onSelect,
+}: RingTileProps) {
+  const centre = tileCentre(tile.index, ringSize);
+  const points = tileHexPoints(tile.index, ringSize);
+  const hancur = tile.damage === 2;
+  const retak = tile.damage === 1;
+
+  const fill = tile.isPosSiaga
+    ? POS_SIAGA_COLOR
+    : tile.sectorId
+      ? SECTOR_COLOR[tile.sectorId]
+      : POS_SIAGA_COLOR;
+  const edge = tile.isPosSiaga
+    ? POS_SIAGA_EDGE
+    : tile.sectorId
+      ? SECTOR_EDGE[tile.sectorId]
+      : POS_SIAGA_EDGE;
+  const glyph = tile.isPosSiaga ? "pos" : SECTOR_GLYPH[tile.sectorId ?? "merah"];
+
+  const calm = tile.occupants.filter((v) => v.status === "tenang");
+  const panicked = tile.occupants.filter((v) => v.status === "panik");
+  const shown = [...panicked, ...calm].slice(0, 3);
+  const overflow = tile.occupants.length - shown.length;
+
+  const label = [
+    regionName ?? `${id.board.title} ${tile.index}`,
+    tile.isPosSiaga ? id.board.posSiaga : id.board.sectorCue[tile.sectorId ?? "merah"],
+    retak ? id.board.damage[1] : hancur ? id.board.damage[2] : null,
+    tile.hasCrisisToken ? id.board.crisisToken : null,
+    calm.length ? `${calm.length} ${id.board.calm}` : null,
+    panicked.length ? `${panicked.length} ${id.board.panicked}` : null,
+    isMoveTarget || isSeaTarget ? id.board.moveTarget : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  return (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+      aria-pressed={isSelected}
+      className="group cursor-pointer outline-none"
+      onClick={() => onSelect(tile.index)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(tile.index);
+        }
+      }}
+    >
+      {/* Badan ubin */}
+      <polygon
+        points={points}
+        fill={hancur ? "#1b1b1f" : fill}
+        stroke={hancur ? "#000000" : edge}
+        strokeWidth={3}
+        opacity={hancur ? 0.9 : 1}
+      />
+
+      {/* Watermark ikon sektor — isyarat non-warna */}
+      <path
+        d={GLYPH_PATH[glyph]}
+        transform={`translate(${centre.x} ${centre.y - 20}) scale(0.95)`}
+        fill="none"
+        stroke="#ffffff"
+        strokeWidth={2.6}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={hancur ? 0.18 : 0.62}
+      />
+
+      {/* Retak — dua garis patah + tepi kuning */}
+      {retak && (
+        <>
+          <polygon
+            points={points}
+            fill="none"
+            stroke="#F0B429"
+            strokeWidth={4}
+            strokeDasharray="10 7"
+          />
+          <path
+            d={`M ${centre.x - 30} ${centre.y - 26} l 11 14 l -8 9 l 14 16
+                M ${centre.x + 6} ${centre.y - 30} l -7 17 l 12 8 l -5 15`}
+            fill="none"
+            stroke="#2b1a05"
+            strokeWidth={3}
+            strokeLinecap="round"
+            opacity={0.75}
+          />
+        </>
+      )}
+
+      {/* Hancur — dicoret dan digelapkan */}
+      {hancur && (
+        <>
+          <line
+            x1={centre.x - 34}
+            y1={centre.y - 34}
+            x2={centre.x + 34}
+            y2={centre.y + 34}
+            stroke="#c0392b"
+            strokeWidth={6}
+            strokeLinecap="round"
+          />
+          <line
+            x1={centre.x + 34}
+            y1={centre.y - 34}
+            x2={centre.x - 34}
+            y2={centre.y + 34}
+            stroke="#c0392b"
+            strokeWidth={6}
+            strokeLinecap="round"
+          />
+        </>
+      )}
+
+      {/* Token Warga: bentuk + warna + ikon, bukan warna saja */}
+      {!hancur && (
+        <g>
+          {shown.map((v, i) => {
+            const step = 22;
+            const x = centre.x + (i - (shown.length - 1) / 2) * step;
+            const y = centre.y + 8;
+            return v.status === "panik" ? (
+              <g key={v.id}>
+                <rect
+                  x={x - 8.5}
+                  y={y - 8.5}
+                  width={17}
+                  height={17}
+                  rx={2.5}
+                  transform={`rotate(45 ${x} ${y})`}
+                  fill="#EF4444"
+                  stroke="#7F1D1D"
+                  strokeWidth={2.5}
+                />
+                <text
+                  x={x}
+                  y={y + 5}
+                  textAnchor="middle"
+                  fontSize={14}
+                  fontWeight={900}
+                  fill="#ffffff"
+                >
+                  !
+                </text>
+              </g>
+            ) : (
+              <circle
+                key={v.id}
+                cx={x}
+                cy={y}
+                r={9.5}
+                fill="#ffffff"
+                stroke="#047857"
+                strokeWidth={3}
+              />
+            );
+          })}
+          {overflow > 0 && (
+            <text
+              x={centre.x + 34}
+              y={centre.y + 14}
+              textAnchor="middle"
+              fontSize={16}
+              fontWeight={900}
+              fill="#ffffff"
+            >
+              +{overflow}
+            </text>
+          )}
+        </g>
+      )}
+
+      {/* Token Krisis */}
+      {tile.hasCrisisToken && !hancur && (
+        <g>
+          <circle
+            cx={centre.x + 30}
+            cy={centre.y - 32}
+            r={13}
+            fill={CRISIS_COLOR}
+            stroke="#ffffff"
+            strokeWidth={3}
+          />
+          <text
+            x={centre.x + 30}
+            y={centre.y - 26}
+            textAnchor="middle"
+            fontSize={17}
+            fontWeight={900}
+            fill="#ffffff"
+          >
+            !
+          </text>
+        </g>
+      )}
+
+      {/* Evakuasi terkunci */}
+      {tile.evacuationLocked && !hancur && (
+        <rect
+          x={centre.x - 40}
+          y={centre.y - 40}
+          width={14}
+          height={11}
+          rx={2}
+          fill="#111827"
+          stroke="#ffffff"
+          strokeWidth={2}
+        />
+      )}
+
+      {/* Standee pemain */}
+      {players.length > 0 && (
+        <text
+          x={centre.x}
+          y={centre.y + 36}
+          textAnchor="middle"
+          fontSize={players.length > 2 ? 18 : 24}
+        >
+          {players.map((p) => emojiForRole(p.roleId)).join("")}
+        </text>
+      )}
+
+      {/* Nomor ubin — kait cepat saat diskusi di meja */}
+      <text
+        x={centre.x}
+        y={centre.y - 34}
+        textAnchor="middle"
+        fontSize={15}
+        fontWeight={800}
+        fill="#ffffff"
+        opacity={0.72}
+      >
+        {tile.index}
+      </text>
+
+      {/* Sorotan status */}
+      {isNewsTarget && (
+        <polygon
+          points={points}
+          fill="none"
+          stroke={CRISIS_COLOR}
+          strokeWidth={7}
+          className="panic-pulse"
+          style={{ transformOrigin: `${centre.x}px ${centre.y}px` }}
+        />
+      )}
+      {isMoveTarget && !isSelected && (
+        <polygon points={points} fill="none" stroke="#34D399" strokeWidth={7} />
+      )}
+      {isSeaTarget && !isSelected && (
+        <polygon
+          points={points}
+          fill="none"
+          stroke={SEA_ROUTE_COLOR}
+          strokeWidth={7}
+          strokeDasharray="14 8"
+        />
+      )}
+      {isSelected && (
+        <polygon points={points} fill="none" stroke="#ffffff" strokeWidth={8} />
+      )}
+
+      {/* Area sentuh penuh heksagon — tetap di atas semua dekorasi */}
+      <polygon points={points} fill="transparent" />
+      {/* Cincin fokus keyboard */}
+      <polygon
+        points={tileHexPoints(tile.index, ringSize, HEX_RADIUS + 6)}
+        fill="none"
+        stroke="#facc15"
+        strokeWidth={5}
+        className="opacity-0 group-focus-visible:opacity-100"
+      />
+    </g>
+  );
+}
+
+export const RingTile = memo(RingTileImpl);

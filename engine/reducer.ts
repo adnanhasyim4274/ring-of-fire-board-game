@@ -1,63 +1,76 @@
-// Pure reducer: (state, action) => newState. No DOM, no React, no I/O.
+// ============================================================================
+// RING OF FIRE v2 — pure reducer: (state, action) => newState.
+// No DOM, no React, no I/O, no Math.random (seeded PRNG only).
+// Phase order: p1_disaster -> p2_news -> p3_turns -> p4_verdict -> p5_impact
+// ============================================================================
 import type {
-  EvidenceCategory,
+  ChaosCard,
+  EvidenceCard,
   GameAction,
-  GamePhase,
   GameState,
+  NewsEffect,
   Player,
+  Scenario,
+  SectorId,
+  TileDamage,
   TileState,
   VillagerToken,
 } from "./types";
-import { gameConfig } from "@/data/gameConfig";
-import { eventCardById } from "@/data/eventCards";
+import { scenarioById } from "@/data/scenarios";
+import { roleById } from "@/data/roles";
+import { newsCardById } from "@/data/newsCards";
 import { evidenceCardById, buildEvidenceDeck } from "@/data/evidenceCards";
 import { disasterCardById, buildDisasterDeck } from "@/data/disasterCards";
-import { roleById } from "@/data/roles";
-import { scenarioById } from "@/data/scenarios";
+import { chaosCardById } from "@/data/chaosCards";
+import { rewardCardById } from "@/data/rewardCards";
 import {
-  adjacentIndices,
+  BARTER_COST,
+  DIFFICULTY_PRESETS,
+  INVESTIGATE_COST,
+  STARTING_HAND,
+  SUB_MISSION_REPUTATION,
+  allNeighbors,
+  applyChaos,
+  areRimAdjacent,
+  areSeaRouteLinked,
   calmCost,
   checkGameOver,
   escortBlocked,
   escortCost,
-  getScenario,
-  isAdjacent,
+  handLimit,
+  hasAbility,
+  hasChaos,
+  isCategoryBlocked,
   isPassable,
-  isSafeZone,
+  isSeaRouteOpen,
+  maxEscortGroup,
   moveCost,
+  mulberry32,
   nearestPanickedVillager,
+  nearestSafeStep,
+  resolveVerdict,
+  roleOf,
+  sectorTiles,
   shuffled,
-  stepTowardNearestSafeZone,
+  startingAp,
+  stepTowardNearestPosSiaga,
 } from "./rules";
 
+// ——— Loose data views (the data lane owns these modules) ————————————————
+const scenarioMap = scenarioById as unknown as Record<string, Scenario | undefined>;
+const newsMap = newsCardById as unknown as Record<string, GameState["activeNews"]>;
+const disasterMap = disasterCardById as unknown as Record<string, GameState["activeDisaster"]>;
+const evidenceMap = evidenceCardById as unknown as Record<string, EvidenceCard | undefined>;
+const chaosMap = chaosCardById as unknown as Record<string, ChaosCard | undefined>;
+const rewardMap = rewardCardById as unknown as Record<
+  string,
+  { id: string; cost: number; title: string; effectKey: string } | undefined
+>;
+
+// ——— Small utilities ——————————————————————————————————————————————————
+
 function log(s: GameState, message: string) {
-  s.log.push({ round: s.round, phase: s.phase, message, timestamp: Date.now() });
-}
-
-function applyGameOverCheck(s: GameState) {
-  if (s.phase === "game_over") return;
-  const result = checkGameOver(s);
-  if (result.over) {
-    s.phase = "game_over";
-    s.gameOverReason = result.reason!;
-    log(s, `Game over: ${result.reason}`);
-  }
-}
-
-function currentPlayer(s: GameState): Player {
-  return s.players[s.currentPlayerIndex];
-}
-
-function findPlayer(s: GameState, playerId: string): Player | undefined {
-  return s.players.find((p) => p.id === playerId);
-}
-
-/** Remove ONE instance of a card id from a hand (deck has duplicate ids). */
-function removeFromHand(player: Player, cardId: string): boolean {
-  const i = player.hand.indexOf(cardId);
-  if (i === -1) return false;
-  player.hand.splice(i, 1);
-  return true;
+  s.log.push({ round: s.round, phase: s.phase, message, timestamp: s.log.length });
 }
 
 function nextSeed(s: GameState): number {
@@ -65,238 +78,519 @@ function nextSeed(s: GameState): number {
   return s.rngSeed;
 }
 
-/** Draw one evidence card, reshuffling the discard pile into the deck if needed. */
-function drawEvidence(s: GameState, player: Player, preferCategories?: EvidenceCategory[]) {
-  if (s.evidenceDeck.length === 0 && s.evidenceDiscard.length > 0) {
-    s.evidenceDeck = shuffled(s.evidenceDiscard, nextSeed(s));
-    s.evidenceDiscard = [];
-    log(s, "Evidence discard pile reshuffled into the deck.");
-  }
-  if (s.evidenceDeck.length === 0) return;
-  let index = 0;
-  if (preferCategories) {
-    const found = s.evidenceDeck.findIndex((id) =>
-      preferCategories.includes(evidenceCardById[id].category)
-    );
-    if (found !== -1) index = found;
-  }
-  const [id] = s.evidenceDeck.splice(index, 1);
-  player.hand.push(id);
+function currentPlayer(s: GameState): Player | undefined {
+  return s.players[s.currentPlayerIndex];
 }
+
+function findPlayer(s: GameState, playerId: string): Player | undefined {
+  return s.players.find((p) => p.id === playerId);
+}
+
+/** Remove ONE instance of a card id from a hand (decks contain duplicates). */
+function removeFromHand(player: Player, cardId: string): boolean {
+  const i = player.hand.indexOf(cardId);
+  if (i === -1) return false;
+  player.hand.splice(i, 1);
+  return true;
+}
+
+function applyGameOverCheck(s: GameState, endOfRound = false) {
+  if (s.phase === "game_over") return;
+  const result = checkGameOver(s, { endOfRound });
+  if (result.over) {
+    s.phase = "game_over";
+    s.gameOverReason = result.reason!;
+    log(s, `Permainan berakhir: ${result.reason}.`);
+  }
+}
+
+// ——— Decks ————————————————————————————————————————————————————————————
+
+/** Draw one Evidence card. Reshuffles the discard pile when the deck runs dry. */
+function drawEvidence(s: GameState, player: Player): boolean {
+  if (s.decks.evidence.length === 0) {
+    if (s.discards.evidence.length > 0) {
+      s.decks.evidence = shuffled(s.discards.evidence, nextSeed(s));
+      s.discards.evidence = [];
+      log(s, "Tumpukan buang Evidence dikocok ulang menjadi dek baru.");
+    } else {
+      s.decks.evidence = shuffled(buildEvidenceDeck(), nextSeed(s));
+    }
+  }
+  const id = s.decks.evidence.shift();
+  if (!id) return false;
+  player.hand.push(id);
+  return true;
+}
+
+function drawNewsId(s: GameState): string | null {
+  if (s.decks.news.length === 0) {
+    const pool = s.discards.news.length > 0 ? s.discards.news : Object.keys(newsMap);
+    s.decks.news = shuffled(pool, nextSeed(s));
+    s.discards.news = [];
+    log(s, "Dek Berita dikocok ulang.");
+  }
+  return s.decks.news.shift() ?? null;
+}
+
+function drawChaosId(s: GameState): string | null {
+  if (s.decks.chaos.length === 0) {
+    const all = Object.keys(chaosMap);
+    const fresh = all.filter((id) => !s.activeChaos.includes(id));
+    s.decks.chaos = shuffled(fresh.length > 0 ? fresh : all, nextSeed(s));
+  }
+  return s.decks.chaos.shift() ?? null;
+}
+
+// ——— Villagers & tiles ————————————————————————————————————————————————
 
 function calmVillager(v: VillagerToken) {
-  if (v.status === "panic") v.status = "normal";
+  if (v.status === "panik") v.status = "tenang";
 }
 
-function panicTile(tile: TileState) {
-  for (const v of tile.occupants) if (v.status === "normal") v.status = "panic";
-}
-
-/** Resolve the active event: "success" (a required lock was opened) or "ignored". */
-function resolveEvent(s: GameState, mode: "success" | "ignored") {
-  const card = s.activeEventCard;
-  if (!card || s.activeEventOutcome !== "pending") return;
-  const targetTile = s.activeEventTileIndex !== null ? s.tiles[s.activeEventTileIndex] : null;
-
-  if (mode === "success") {
-    if (card.status === "fact") {
-      s.activeEventOutcome = "validated";
-      s.stats.factsValidated++;
-      log(s, `"${card.title}" verified as FACT — the correct science spreads.`);
-      if (targetTile) {
-        targetTile.hasCrisisToken = false;
-        targetTile.permanentPanic = false;
-        if (card.validated?.calmTargetTile !== false) targetTile.occupants.forEach(calmVillager);
-        if (card.validated?.moveTargetTowardSafe && targetTile.status === "normal") {
-          const step = stepTowardNearestSafeZone(s, targetTile.index);
-          if (step !== null) {
-            const movers = [...targetTile.occupants];
-            targetTile.occupants = [];
-            for (const v of movers) {
-              v.tileIndex = step;
-              s.tiles[step].occupants.push(v);
-            }
-            log(s, "Villagers move one step away from the shore!");
-          }
-        }
-      }
-      if (card.validated?.calmTileType) {
-        for (const tile of s.tiles) {
-          if (tile.typeId === card.validated.calmTileType) {
-            tile.occupants.forEach(calmVillager);
-            tile.hasCrisisToken = false;
-            tile.permanentPanic = false;
-          }
-        }
-      }
-    } else {
-      s.activeEventOutcome = "debunked";
-      s.stats.hoaxesDebunked++;
-      log(s, `"${card.title}" DEBUNKED (${card.status}) — the crisis calms down.`);
-      if (targetTile) {
-        targetTile.hasCrisisToken = false;
-        targetTile.permanentPanic = false;
-        targetTile.occupants.forEach(calmVillager);
-      }
-    }
-  } else {
-    s.activeEventOutcome = "ignored";
-    s.stats.eventsIgnored++;
-    if (s.panicShield) {
-      log(s, `"${card.title}" went unverified — but Mental Fortitude holds the Panic Meter steady.`);
-    } else {
-      s.panicMeter++;
-      log(s, `"${card.title}" went unverified — Panic Meter rises to ${s.panicMeter}.`);
-    }
-    if (targetTile) {
-      if (card.ignored?.panicTargetTile) panicTile(targetTile);
-      if (card.ignored?.permanentPanic) {
-        targetTile.permanentPanic = true;
-        log(s, "Villagers there refuse all normal help — only special actions can calm them now.");
-      }
-    }
-    if (card.ignored?.apPenaltyFirstPlayer) {
-      const first = s.players[s.firstPlayerIndex];
-      s.pendingApBonus[first.id] = (s.pendingApBonus[first.id] ?? 0) - 1;
-      log(s, `${first.name} loses 1 AP next phase dealing with the fallout.`);
-    }
-    // Monkey's vulnerability: a hoax going un-debunked costs them 1 AP next round.
-    if (card.status !== "fact") {
-      for (const p of s.players) {
-        if (p.roleId === "monkey") {
-          s.monkeyPenalty[p.id] = true;
-          log(s, `${p.name} (Monkey) is swamped by the rumor mill — 1 AP penalty next round.`);
-        }
-      }
-    }
-    applyGameOverCheck(s);
+/** 🦎 Komodo — Aura Otoritas: no auto-panic on the tile they are standing on. */
+function panicTile(s: GameState, tile: TileState) {
+  const grounded = s.players.some((p) => p.position === tile.index && hasAbility(p, "suppress"));
+  if (grounded) {
+    log(s, "Aura Otoritas Komodo menahan kepanikan di ubin itu.");
+    return;
   }
+  for (const v of tile.occupants) if (v.status === "tenang") v.status = "panik";
 }
 
-/** Phase 3 entry: reset AP (base + bonuses − penalties), reset per-round flags. */
-function enterEvacuationPhase(s: GameState) {
-  s.phase = "phase3_evacuation";
+function allSectorIds(s: GameState): SectorId[] {
+  const out: SectorId[] = [];
+  for (const t of s.tiles) {
+    if (t.sectorId && !out.includes(t.sectorId)) out.push(t.sectorId);
+  }
+  return out;
+}
+
+/** Deterministic pick: most villagers, ties broken by lowest ring index. */
+function pickMostVillagers(candidates: TileState[]): TileState | undefined {
+  let best: TileState | undefined;
+  for (const t of candidates) {
+    if (!best || t.occupants.length > best.occupants.length) best = t;
+  }
+  return best;
+}
+
+/** 2-stage damage: 0 -> 1 Retak -> 2 Hancur. Pos Siaga never takes damage. */
+function damageTile(s: GameState, index: number) {
+  const tile = s.tiles[index];
+  if (!tile || tile.isPosSiaga || tile.damage >= 2) return;
+  tile.damage = (tile.damage + 1) as TileDamage;
+  if (tile.damage === 1) {
+    log(s, `Ubin ${index} RETAK — biaya masuk naik.`);
+    return;
+  }
+  const lost = [...tile.occupants];
+  for (const v of lost) {
+    v.status = "hilang";
+    s.casualties.push(v);
+  }
+  tile.occupants = [];
+  tile.hasCrisisToken = false;
+  log(
+    s,
+    lost.length > 0
+      ? `Ubin ${index} HANCUR — ${lost.length} warga hilang!`
+      : `Ubin ${index} HANCUR — untungnya tidak ada warga di sana.`
+  );
   for (const p of s.players) {
-    let ap = gameConfig.baseAP + (s.pendingApBonus[p.id] ?? 0);
-    if (s.monkeyPenalty[p.id]) ap -= 1;
-    p.ap = Math.max(0, ap);
-    if (p.roleId === "tiger") s.tigerEscortBonus[p.id] = true;
+    if (p.position !== index) continue;
+    const step = nearestSafeStep(s, index);
+    if (step !== null) {
+      p.position = step;
+      log(s, `${p.name} melompat ke ubin ${step} tepat pada waktunya!`);
+    }
   }
+}
+
+/** Chaos "Eksodus Panik": villagers wander to a random neighbouring tile. */
+function driftVillagers(s: GameState, count: number) {
+  const rng = mulberry32(nextSeed(s));
+  for (let k = 0; k < count; k++) {
+    const movable = s.tiles.filter((t) => !t.isPosSiaga && t.occupants.length > 0);
+    if (movable.length === 0) return;
+    const tile = movable[Math.floor(rng() * movable.length)];
+    const options = allNeighbors(s, tile.index).filter((n) => isPassable(s.tiles[n]));
+    if (options.length === 0) continue;
+    const target = s.tiles[options[Math.floor(rng() * options.length)]];
+    const villager = tile.occupants.shift();
+    if (!villager) continue;
+    villager.tileIndex = target.index;
+    if (target.isPosSiaga) {
+      villager.status = "selamat";
+      s.evacuees.push(villager);
+    } else {
+      target.occupants.push(villager);
+    }
+  }
+  log(s, "Eksodus Panik — warga berpindah tanpa arah.");
+}
+
+// ——— Sub-missions ——————————————————————————————————————————————————————
+
+function bumpSubMission(s: GameState, player: Player, key: string, amount = 1) {
+  const role = roleOf(player);
+  if (!role || role.subMissionKey !== key || player.subMissionDone) return;
+  player.subMissionProgress += amount;
+}
+
+/** 🦧 "Kolektor Epistemologi" is a snapshot condition, so re-evaluate on hand change. */
+function refreshCollector(s: GameState) {
+  for (const p of s.players) {
+    const role = roleOf(p);
+    if (!role || role.subMissionKey !== "collect_3pt" || p.subMissionDone) continue;
+    const threePointers = p.hand.filter((id) => evidenceMap[id]?.points === 3).length;
+    if (threePointers > p.subMissionProgress) p.subMissionProgress = threePointers;
+  }
+}
+
+function awardSubMissions(s: GameState) {
+  for (const p of s.players) {
+    const role = roleOf(p);
+    if (!role || p.subMissionDone) continue;
+    const target = role.subMissionTarget ?? 3;
+    if (p.subMissionProgress < target) continue;
+    p.subMissionDone = true;
+    s.reputation += SUB_MISSION_REPUTATION;
+    s.stats.subMissionsDone += 1;
+    log(s, `Sub-Misi "${role.subMissionName}" selesai — +${SUB_MISSION_REPUTATION} Reputasi!`);
+  }
+}
+
+// ——— News effects ——————————————————————————————————————————————————————
+
+function moveVillagerTo(s: GameState, villager: VillagerToken, fromTile: TileState, toIndex: number) {
+  fromTile.occupants = fromTile.occupants.filter((v) => v.id !== villager.id);
+  const target = s.tiles[toIndex];
+  villager.tileIndex = toIndex;
+  if (target?.isPosSiaga) {
+    villager.status = "selamat";
+    s.evacuees.push(villager);
+  } else if (target) {
+    target.occupants.push(villager);
+  }
+}
+
+function applyNewsEffect(s: GameState, effect: NewsEffect | undefined) {
+  if (!effect) return;
+  const tile = s.newsTileIndex !== null ? s.tiles[s.newsTileIndex] : null;
+  const sectorId = s.activeNews?.targetSectorId ?? null;
+
+  if (effect.panic) {
+    if (s.panicShield) {
+      log(s, "Ketahanan Mental menahan Meter Kepanikan ronde ini.");
+    } else {
+      s.panicMeter += effect.panic;
+      log(s, `Meter Kepanikan naik ke ${s.panicMeter}.`);
+    }
+  }
+  if (effect.panicTargetSector && sectorId) {
+    for (const t of sectorTiles(s, sectorId)) panicTile(s, t);
+  }
+  if (effect.calmTargetSector && sectorId) {
+    for (const t of sectorTiles(s, sectorId)) t.occupants.forEach(calmVillager);
+    log(s, "Informasi yang benar menenangkan warga di sektor target.");
+  }
+  if (effect.lockEvacuationSector && sectorId) {
+    for (const t of sectorTiles(s, sectorId)) t.evacuationLocked = true;
+    log(s, "Evakuasi di sektor target terkunci satu ronde.");
+  }
+  if (effect.apPenaltyFirstPlayer) {
+    const first = s.players[s.firstPlayerIndex];
+    if (first) {
+      s.pendingApBonus[first.id] = (s.pendingApBonus[first.id] ?? 0) - effect.apPenaltyFirstPlayer;
+      log(s, `${first.name} kehilangan ${effect.apPenaltyFirstPlayer} AP ronde berikutnya.`);
+    }
+  }
+  if (effect.stepTowardPosSiaga && tile) {
+    const step = stepTowardNearestPosSiaga(s, tile.index);
+    if (step !== null) {
+      for (const v of [...tile.occupants]) moveVillagerTo(s, v, tile, step);
+      log(s, "Warga bergerak satu langkah menuju Pos Siaga terdekat.");
+    }
+  }
+  if (effect.removeCrisisToken && tile) {
+    tile.hasCrisisToken = false;
+  }
+  if (effect.apBonus) {
+    for (const p of s.players) {
+      s.pendingApBonus[p.id] = (s.pendingApBonus[p.id] ?? 0) + effect.apBonus;
+    }
+    log(s, `Semua pemain mendapat +${effect.apBonus} AP ronde berikutnya.`);
+  }
+  if (effect.drawEvidence) {
+    for (const p of s.players) {
+      for (let i = 0; i < effect.drawEvidence; i++) drawEvidence(s, p);
+    }
+    refreshCollector(s);
+  }
+}
+
+// ——— Phase transitions ————————————————————————————————————————————————
+
+/** Fase 3 entry: hand out AP (4 ± pending bonuses / Reward / Chaos), reset flags. */
+function enterTurnsPhase(s: GameState) {
+  s.phase = "p3_turns";
+  for (const p of s.players) {
+    p.ap = startingAp(s, p);
+    p.activeUsedThisRound = false;
+    p.escortBonusAp = 0;
+  }
+  // pendingApBonus is a one-round carry: granted last round, consumed right here.
   s.pendingApBonus = {};
-  s.monkeyPenalty = {};
   s.playersEndedTurn = [];
   s.currentPlayerIndex = s.firstPlayerIndex;
-  log(s, "Rescue phase — spend your Action Points!");
+  log(s, "Fase 3 — Giliran Pemain. Belanjakan Action Point kalian!");
 }
 
-/** Phase 4 → next round: rotate first player, activate the incoming disaster. */
-function startNextRound(s: GameState) {
-  s.round++;
-  s.firstPlayerIndex = (s.firstPlayerIndex + 1) % s.players.length;
-  s.currentPlayerIndex = s.firstPlayerIndex;
-  s.activeDisasterEffect = s.incomingDisaster;
-  s.incomingDisaster = null;
-  s.activeEventCard = null;
-  s.activeEventTileIndex = null;
-  s.activeEventLocksOpened = [];
-  s.activeEventOutcome = "pending";
-  s.panicShield = false;
-  s.abilityUsed = {};
-  s.peek = null;
-  s.phase = "phase1_influx";
-  log(s, `Round ${s.round} begins. First player: ${s.players[s.firstPlayerIndex].name}.`);
+function enterVerdictPhase(s: GameState) {
+  s.phase = "p4_verdict";
+  // "Evakuasi terkunci" lasts exactly one round; it expires here, before a new
+  // Fase 4 can set it again.
+  for (const t of s.tiles) t.evacuationLocked = false;
+  log(s, "Fase 4 — Sidang Fakta. Buka gembok, ucapkan vonis, lalu balik kartunya.");
+}
 
-  const effect = s.activeDisasterEffect;
-  if (effect?.roundEffectKey === "panic_spread_fault") {
-    const scenario = getScenario(s);
-    const affected = new Set<number>();
-    for (const tile of s.tiles) {
-      if (tile.typeId === "fault_zone") {
-        affected.add(tile.index);
-        for (const n of adjacentIndices(tile.index, scenario.cols, scenario.rows)) affected.add(n);
-      }
+/** Commit & Flip resolution — the heart of the game. */
+function resolveFlip(s: GameState) {
+  const news = s.activeNews;
+  if (!news || s.newsRevealed) return;
+  s.newsRevealed = true;
+  const outcome = resolveVerdict(s);
+  s.lastOutcome = outcome;
+  const tile = s.newsTileIndex !== null ? s.tiles[s.newsTileIndex] : null;
+
+  if (outcome === "terverifikasi") {
+    s.reputation += 1;
+    s.stats.terverifikasi += 1;
+    if (news.truth === "hoax") s.stats.hoaxDebunked += 1;
+    else s.stats.factsValidated += 1;
+    if (tile) tile.hasCrisisToken = false;
+    log(s, `TERVERIFIKASI — "${news.title}" ternyata ${news.truth.toUpperCase()}. +1 Poin Reputasi.`);
+    applyNewsEffect(s, news.ifValidated);
+  } else if (outcome === "tebakan_beruntung") {
+    s.stats.tebakanBeruntung += 1;
+    log(
+      s,
+      `TEBAKAN BERUNTUNG — vonis kalian benar, tapi gemboknya belum lengkap. ` +
+        `Tidak ada Poin Reputasi, Token Krisis tetap di papan.`
+    );
+  } else {
+    s.stats.hoaksMenyebar += 1;
+    if (s.panicShield) {
+      log(s, "HOAKS MENYEBAR — tapi Ketahanan Mental menahan Meter Kepanikan ronde ini.");
+    } else {
+      s.panicMeter += 1;
+      log(s, `HOAKS MENYEBAR — Meter Kepanikan naik ke ${s.panicMeter}.`);
     }
-    for (const i of affected) panicTile(s.tiles[i]);
-    log(s, "Aftershock Swarm! Villagers on and around the fault line panic.");
+    const chaosId = drawChaosId(s);
+    if (chaosId) {
+      const card = applyChaos(s, chaosId);
+      if (card) log(s, `Kartu Chaos: "${card.title}" — ${card.description}`);
+    }
+    applyNewsEffect(s, news.ifIgnored);
   }
-  if (effect?.roundEffectKey === "peek_disaster" && s.disasterDeck.length > 0) {
-    s.peek = { kind: "disaster", cardId: s.disasterDeck[0] };
-    log(s, "Fleeing wildlife reveals what the mountain will do next — the team peeks at the Disaster Deck.");
+  applyGameOverCheck(s);
+}
+
+function applyDisasterDamage(s: GameState) {
+  const d = s.activeDisaster;
+  if (!d || d.damageTarget === "none") return;
+  const targets: number[] = [];
+  if (d.damageTarget === "most_villagers") {
+    const t = pickMostVillagers(s.tiles.filter((x) => !x.isPosSiaga && x.damage < 2));
+    if (t) targets.push(t.index);
+  } else {
+    const sectors = d.affectedSectorIds?.length ? d.affectedSectorIds : allSectorIds(s);
+    for (const sec of sectors) {
+      const t = pickMostVillagers(
+        s.tiles.filter((x) => x.sectorId === sec && !x.isPosSiaga && x.damage < 2)
+      );
+      if (t && !targets.includes(t.index)) targets.push(t.index);
+    }
+  }
+  if (targets.length > 0) log(s, `Konsekuensi Akhir: ${d.endEffect}`);
+  for (const i of targets) damageTile(s, i);
+}
+
+/** Fase 5 — Dampak & Eskalasi. */
+function enterImpactPhase(s: GameState) {
+  // A table that never flipped the card is treated as an abstain.
+  if (s.activeNews && !s.newsRevealed) {
+    if (s.verdict === null) s.verdict = "abstain";
+    resolveFlip(s);
+  }
+  if (s.phase === "game_over") return;
+
+  s.phase = "p5_impact";
+  log(s, "Fase 5 — Dampak & Eskalasi.");
+  applyDisasterDamage(s);
+  if (hasChaos(s, "villager_drift")) driftVillagers(s, 2);
+  refreshCollector(s);
+  awardSubMissions(s);
+  applyGameOverCheck(s, true);
+}
+
+function startNextRound(s: GameState) {
+  if (s.activeNews) s.discards.news.push(s.activeNews.id);
+  s.round += 1;
+  s.firstPlayerIndex = s.players.length > 0 ? (s.firstPlayerIndex + 1) % s.players.length : 0;
+  s.currentPlayerIndex = s.firstPlayerIndex;
+  s.activeDisaster = null;
+  s.activeNews = null;
+  s.newsTileIndex = null;
+  s.locksOpened = [];
+  s.verdict = null;
+  s.newsRevealed = false;
+  s.lastOutcome = null;
+  s.panicShield = false;
+  s.playersEndedTurn = [];
+  s.peek = null;
+  s.seaRouteOpen = true;
+  for (const p of s.players) {
+    p.activeUsedThisRound = false;
+    p.altRouteReady = false;
+    p.escortBonusAp = 0;
+  }
+  s.phase = "p1_disaster";
+  const first = s.players[s.firstPlayerIndex];
+  log(s, `Ronde ${s.round} dimulai. Pemain pertama: ${first ? first.name : "-"}.`);
+  applyGameOverCheck(s);
+}
+
+// ——— START_GAME ————————————————————————————————————————————————————————
+
+function buildTiles(scenario: Scenario): TileState[] {
+  const size = scenario.ringSize || scenario.layout?.length || 28;
+  const posSiaga = new Set(scenario.posSiagaIndices ?? []);
+  const sectorOf = (i: number): SectorId | null =>
+    (scenario.sectors ?? []).find((sec) => sec.tileIndices.includes(i))?.id ?? null;
+  return Array.from({ length: size }, (_, index) => ({
+    index,
+    typeId: scenario.layout?.[index] ?? (posSiaga.has(index) ? "pos_siaga" : "sektor"),
+    sectorId: posSiaga.has(index) ? null : sectorOf(index),
+    isPosSiaga: posSiaga.has(index),
+    damage: 0 as TileDamage,
+    occupants: [],
+    hasCrisisToken: false,
+    evacuationLocked: false,
+  }));
+}
+
+function seedVillagers(scenario: Scenario, tiles: TileState[]) {
+  const total = scenario.totalVillagers || 16;
+  let placed = 0;
+  const put = (index: number) => {
+    const tile = tiles[index];
+    if (!tile || tile.isPosSiaga) return;
+    placed += 1;
+    tile.occupants.push({ id: `w${placed}`, status: "tenang", tileIndex: index });
+  };
+  (scenario.villagerSetup ?? []).forEach((count, index) => {
+    for (let k = 0; k < count && placed < total; k++) put(index);
+  });
+  // Fallback so the board is never empty if villagerSetup is missing/short.
+  if (placed < total) {
+    const open = tiles.filter((t) => !t.isPosSiaga).map((t) => t.index);
+    let cursor = 0;
+    while (placed < total && open.length > 0) {
+      put(open[cursor % open.length]);
+      cursor += 1;
+    }
   }
 }
 
 function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameState {
-  const scenario = scenarioById[action.scenarioId] ?? scenarioById[gameConfig.defaultScenarioId];
+  const scenario = scenarioMap[action.scenarioId] ?? (Object.values(scenarioMap)[0] as Scenario);
+  const preset = DIFFICULTY_PRESETS[action.difficulty] ?? DIFFICULTY_PRESETS.awas;
   const seed = (action.seed ?? 1) >>> 0;
 
-  const tiles: TileState[] = scenario.layout.map((typeId, index) => ({
-    index,
-    typeId,
-    status: "normal",
-    occupants: [],
-    hasCrisisToken: false,
-    permanentPanic: false,
-  }));
-  let vCount = 0;
-  scenario.villagerSetup.forEach((count, index) => {
-    for (let k = 0; k < count; k++) {
-      vCount++;
-      tiles[index].occupants.push({ id: `v${vCount}`, status: "normal", tileIndex: index });
-    }
-  });
+  const tiles = buildTiles(scenario);
+  seedVillagers(scenario, tiles);
 
-  const safeIndex = Math.max(0, scenario.layout.findIndex((t) => t === "safe_zone"));
+  const posList = scenario.posSiagaIndices?.length ? scenario.posSiagaIndices : [0];
   const players: Player[] = action.players.map((p, i) => ({
     id: `p${i + 1}`,
-    name: p.name.trim() || roleById[p.roleId]?.name || `Player ${i + 1}`,
+    name:
+      p.name.trim() ||
+      (roleById as unknown as Record<string, { name?: string } | undefined>)[p.roleId]?.name ||
+      `Pemain ${i + 1}`,
     roleId: p.roleId,
     ap: 0,
     hand: [],
-    position: safeIndex,
+    position: posList[i % posList.length],
+    activeUsedThisRound: false,
     altRouteReady: false,
+    escortBonusAp: 0,
+    subMissionProgress: 0,
+    subMissionDone: false,
+    damagedTilesVisited: [],
   }));
 
   const s: GameState = {
-    phase: "phase1_influx",
+    phase: "p1_disaster",
     round: 1,
     scenarioId: scenario.id,
+    difficulty: action.difficulty,
     players,
     currentPlayerIndex: 0,
     firstPlayerIndex: 0,
+    playersEndedTurn: [],
     tiles,
     panicMeter: 0,
-    panicMeterMax: gameConfig.panicMeterMax,
-    activeEventCard: null,
-    activeEventTileIndex: null,
-    activeEventLocksOpened: [],
-    activeEventOutcome: "pending",
-    eventDeck: shuffled(Object.keys(eventCardById), seed + 1),
-    eventDiscard: [],
-    evidenceDeck: shuffled(buildEvidenceDeck(), seed + 2),
-    evidenceDiscard: [],
-    disasterDeck: shuffled(buildDisasterDeck(scenario.disasterDeckSize), seed + 3),
-    activeDisasterEffect: null,
-    incomingDisaster: null,
+    panicMeterMax: preset.panicMeterMax,
+    reputation: 0,
+    activeDisaster: null,
+    activeNews: null,
+    newsTileIndex: null,
+    locksOpened: [],
+    verdict: null,
+    newsRevealed: false,
+    lastOutcome: null,
+    decks: {
+      disaster: shuffled(buildDisasterDeck(preset.disasterDeckSize), seed + 3).slice(
+        0,
+        preset.disasterDeckSize
+      ),
+      news: shuffled(Object.keys(newsMap), seed + 1),
+      evidence: shuffled(buildEvidenceDeck(), seed + 2),
+      chaos: shuffled(Object.keys(chaosMap), seed + 4),
+    },
+    discards: { disaster: [], news: [], evidence: [] },
+    activeChaos: [],
+    ownedRewards: [],
     evacuees: [],
     casualties: [],
     gameOverReason: null,
     log: [],
-    stats: { hoaxesDebunked: 0, factsValidated: 0, eventsIgnored: 0 },
+    stats: {
+      terverifikasi: 0,
+      tebakanBeruntung: 0,
+      hoaksMenyebar: 0,
+      hoaxDebunked: 0,
+      factsValidated: 0,
+      subMissionsDone: 0,
+    },
     pendingApBonus: {},
-    monkeyPenalty: {},
     panicShield: false,
-    abilityUsed: {},
-    tigerEscortBonus: {},
-    playersEndedTurn: [],
     peek: null,
+    seaRouteOpen: true,
     rngSeed: seed,
   };
+
   for (const p of s.players) {
-    for (let i = 0; i < gameConfig.startingHandSize; i++) drawEvidence(s, p);
+    for (let i = 0; i < STARTING_HAND; i++) drawEvidence(s, p);
   }
-  log(s, `The Guardian Wildlife assemble at ${scenario.name}. Round 1 begins!`);
+  refreshCollector(s);
+  log(s, `Satwa Penjaga berkumpul di ${scenario.name}. Ronde 1 dimulai!`);
   return s;
 }
+
+// ——— The reducer ——————————————————————————————————————————————————————
 
 export function reduce(state: GameState | null, action: GameAction): GameState | null {
   if (action.type === "RESET_GAME") return null;
@@ -308,94 +602,309 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
   if (s.phase === "game_over" && !isDebug) return state;
 
   switch (action.type) {
-    case "DRAW_EVENT_CARD": {
-      if (s.phase !== "phase1_influx" || s.activeEventCard) return state;
-      if (s.eventDeck.length === 0) {
-        s.eventDeck = shuffled(s.eventDiscard, nextSeed(s));
-        s.eventDiscard = [];
+    // ——— Fase 1 — Murka Cincin Api ———————————————————————————————————
+    case "DRAW_DISASTER": {
+      if (s.phase !== "p1_disaster" || s.activeDisaster) return state;
+      if (s.decks.disaster.length === 0) {
+        s.phase = "game_over";
+        s.gameOverReason = "waktu";
+        log(s, "Dek Bencana habis — megathrust datang. Waktu habis.");
+        return s;
       }
-      const id = s.eventDeck.shift()!;
-      const card = eventCardById[id];
-      s.activeEventCard = card;
-      s.activeEventLocksOpened = [];
-      s.activeEventOutcome = "pending";
-      const targetIndex = s.tiles.findIndex(
-        (t) => t.typeId === card.targetTileType && t.status === "normal"
-      );
-      s.activeEventTileIndex = targetIndex >= 0 ? targetIndex : null;
-      if (targetIndex >= 0) {
-        const tile = s.tiles[targetIndex];
-        tile.hasCrisisToken = true;
-        panicTile(tile);
+      const id = s.decks.disaster.shift()!;
+      const card = disasterMap[id];
+      if (!card) return state;
+      s.activeDisaster = card;
+      s.discards.disaster.push(id);
+      // Rute Laut tertutup total saat bencana Oseanografi.
+      s.seaRouteOpen = card.category !== "oseanografi";
+      log(s, `Bencana: "${card.title}" — ${card.roundEffect}`);
+      if (!s.seaRouteOpen) log(s, "Rute Laut TERTUTUP ronde ini.");
+
+      if (card.roundEffectKey === "panic_spread") {
+        const sectors = card.affectedSectorIds?.length ? card.affectedSectorIds : allSectorIds(s);
+        for (const sec of sectors) for (const t of sectorTiles(s, sec)) panicTile(s, t);
+        log(s, "Rentetan gempa susulan — warga di sektor terdampak panik.");
       }
-      // Round replenishment: everyone draws; Monkey draws an extra WHY/WHO card.
-      for (const p of s.players) {
-        for (let i = 0; i < gameConfig.evidencePerRound; i++) drawEvidence(s, p);
-        if (p.roleId === "monkey") drawEvidence(s, p, ["WHY", "WHO"]);
+      if (card.roundEffectKey === "peek_disaster" && s.decks.disaster.length > 0) {
+        s.peek = { kind: "disaster", cardId: s.decks.disaster[0] };
+        log(s, "Satwa turun gunung — tim boleh mengintip Kartu Bencana berikutnya.");
       }
-      log(s, `Breaking news: "${card.title}" — panic spreads near the target area.`);
       return s;
     }
 
-    case "USE_EVIDENCE_FOR_VERIFICATION": {
-      if (s.phase !== "phase2_verification" || !s.activeEventCard) return state;
-      if (s.activeEventOutcome !== "pending") return state;
+    // ——— Fase 2 — Kabar Mengudara ————————————————————————————————————
+    case "DRAW_NEWS": {
+      if (s.phase !== "p2_news" || s.activeNews) return state;
+      const id = drawNewsId(s);
+      if (!id) return state;
+      const card = newsMap[id];
+      if (!card) return state;
+      s.activeNews = card;
+      s.newsRevealed = false;
+      s.verdict = null;
+      s.locksOpened = [];
+      s.lastOutcome = null;
+
+      const inSector = s.tiles.filter(
+        (t) => t.sectorId === card.targetSectorId && !t.isPosSiaga && t.damage < 2
+      );
+      const pool = inSector.length > 0 ? inSector : s.tiles.filter((t) => !t.isPosSiaga && t.damage < 2);
+      const target = pickMostVillagers(pool);
+      s.newsTileIndex = target ? target.index : null;
+      log(s, `Berita masuk: "${card.title}" (${card.category}).`);
+      if (target) {
+        target.hasCrisisToken = true;
+        panicTile(s, target);
+        log(s, `Token Krisis diletakkan di ubin ${target.index} — warga di sana panik.`);
+      }
+      return s;
+    }
+
+    // ——— Fase 3 — Giliran Pemain —————————————————————————————————————
+    case "MOVE_PLAYER": {
+      if (s.phase !== "p3_turns") return state;
       const player = findPlayer(s, action.playerId);
-      const card = evidenceCardById[action.evidenceId];
-      if (!player || !card) return state;
-      if (s.activeDisasterEffect?.roundEffectKey === "block_where" && card.category === "WHERE") {
-        log(s, "Communications Blackout! WHERE evidence can't be checked this round.");
+      const active = currentPlayer(s);
+      if (!player || !active || player.id !== active.id) return state;
+      const to = action.targetTileIndex;
+      const target = s.tiles[to];
+      if (!target || !isPassable(target)) return state;
+      const viaSea = !!action.viaSeaRoute;
+      if (viaSea) {
+        if (!isSeaRouteOpen(s)) {
+          log(s, "Rute Laut tertutup ronde ini.");
+          return s;
+        }
+        if (!areSeaRouteLinked(s, player.position, to)) return state;
+      } else if (!areRimAdjacent(s, player.position, to)) {
+        return state;
+      }
+      const cost = moveCost(s, player.position, to, player, viaSea);
+      if (player.ap < cost) {
+        log(s, `AP tidak cukup untuk bergerak (butuh ${cost}).`);
         return s;
       }
-      const required = s.activeEventCard.requiredLocks;
-      const matches = card.isWildcard || required.includes(card.category);
+      const rawCost = moveCost(s, player.position, to, { ...player, altRouteReady: false }, viaSea);
+      if (player.altRouteReady && rawCost > cost) {
+        player.altRouteReady = false;
+        log(s, `${player.name} memakai Jalur Alternatif — penalti diabaikan.`);
+      }
+      player.ap -= cost;
+      player.position = to;
+      log(s, `${player.name} bergerak ke ubin ${to} (${cost} AP).`);
+      return s;
+    }
+
+    case "CALM_VILLAGER": {
+      if (s.phase !== "p3_turns") return state;
+      const player = findPlayer(s, action.playerId);
+      const active = currentPlayer(s);
+      if (!player || !active || player.id !== active.id) return state;
+      const tile = s.tiles[player.position];
+      const villager = tile?.occupants.find((v) => v.id === action.villagerId);
+      if (!villager) return state;
+      if (villager.status !== "panik") return state;
+      const cost = calmCost(s);
+      if (player.ap < cost) {
+        log(s, `AP tidak cukup untuk menenangkan (butuh ${cost}).`);
+        return s;
+      }
+      player.ap -= cost;
+      villager.status = "tenang";
+      bumpSubMission(s, player, "calm_six", 1);
+      log(s, `${player.name} menenangkan seorang warga (${cost} AP).`);
+      return s;
+    }
+
+    case "ESCORT_VILLAGER": {
+      if (s.phase !== "p3_turns") return state;
+      const player = findPlayer(s, action.playerId);
+      const active = currentPlayer(s);
+      if (!player || !active || player.id !== active.id) return state;
+      const from = s.tiles[player.position];
+      const to = action.targetTileIndex;
+      const target = s.tiles[to];
+      if (!from || !target || !isPassable(target)) return state;
+      const viaSea = !!action.viaSeaRoute;
+      if (viaSea) {
+        if (!isSeaRouteOpen(s)) {
+          log(s, "Rute Laut tertutup ronde ini.");
+          return s;
+        }
+        if (!areSeaRouteLinked(s, player.position, to)) return state;
+      } else if (!areRimAdjacent(s, player.position, to)) {
+        return state;
+      }
+
+      const ids = action.villagerIds ?? [];
+      if (ids.length === 0) return state;
+      const limit = maxEscortGroup(player, viaSea);
+      if (ids.length > limit) {
+        log(s, `Maksimal ${limit} warga per aksi Mengawal.`);
+        return s;
+      }
+      const group: VillagerToken[] = [];
+      for (const id of ids) {
+        const v = from.occupants.find((o) => o.id === id);
+        if (!v) return state;
+        group.push(v);
+      }
+      if (group.some((v) => v.status !== "tenang")) {
+        log(s, "Warga yang panik tidak mau ikut — tenangkan mereka dulu!");
+        return s;
+      }
+      if (escortBlocked(s, from, target)) {
+        log(s, "Evakuasi di jalur itu terkunci ronde ini.");
+        return s;
+      }
+      // Rumor yang belum dibongkar mengunci evakuasi: warga terlalu gaduh untuk
+      // digiring. Menenangkan satu per satu tidak cukup — Token Krisis hanya
+      // hilang lewat verifikasi yang berhasil atau kemampuan Komodo.
+      // Inilah yang membuat mekanik MIL menjadi penentu, bukan pelengkap.
+      if (from.hasCrisisToken) {
+        log(
+          s,
+          "Warga menolak digiring — kabar di ubin ini belum terbukti benar atau salah. " +
+            "Bongkar dulu kabarnya!"
+        );
+        return s;
+      }
+
+      const cost = escortCost(s, player.position, to, player, viaSea);
+      // 🐯 Tactical Escort: a dedicated +1 AP usable only for evacuation.
+      const pool = hasAbility(player, "tactical_escort") ? Math.min(player.escortBonusAp, cost) : 0;
+      if (player.ap < cost - pool) {
+        log(s, `AP tidak cukup untuk mengawal (butuh ${cost}).`);
+        return s;
+      }
+      const rawCost = escortCost(s, player.position, to, { ...player, altRouteReady: false }, viaSea);
+      if (player.altRouteReady && rawCost > cost) player.altRouteReady = false;
+      player.escortBonusAp -= pool;
+      player.ap -= cost - pool;
+
+      const fromCrisis = from.hasCrisisToken;
+      for (const v of group) {
+        moveVillagerTo(s, v, from, to);
+        if (target.isPosSiaga && fromCrisis) bumpSubMission(s, player, "rescue_crisis", 1);
+      }
+      player.position = to;
+      if (target.isPosSiaga) {
+        log(
+          s,
+          `${player.name} mengantar ${group.length} warga ke Pos Siaga — SELAMAT! ` +
+            `(${s.evacuees.length} terselamatkan)`
+        );
+        applyGameOverCheck(s);
+      } else {
+        log(s, `${player.name} mengawal ${group.length} warga ke ubin ${to} (${cost} AP).`);
+      }
+      return s;
+    }
+
+    case "INVESTIGATE": {
+      if (s.phase !== "p3_turns") return state;
+      const player = findPlayer(s, action.playerId);
+      const active = currentPlayer(s);
+      if (!player || !active || player.id !== active.id) return state;
+      if (player.ap < INVESTIGATE_COST) {
+        log(s, `AP tidak cukup untuk investigasi (butuh ${INVESTIGATE_COST}).`);
+        return s;
+      }
+      player.ap -= INVESTIGATE_COST;
+      drawEvidence(s, player);
+      refreshCollector(s);
+      log(s, `${player.name} berinvestigasi dan menarik 1 Kartu Evidence.`);
+      return s;
+    }
+
+    case "PLAY_EVIDENCE_LOCK": {
+      const openWindow = s.phase === "p3_turns" || (s.phase === "p4_verdict" && s.verdict === null);
+      if (!openWindow) return state;
+      const news = s.activeNews;
+      if (!news) return state;
+      const player = findPlayer(s, action.playerId);
+      const card = evidenceMap[action.evidenceId];
+      if (!player || !card) return state;
+      if (!news.locks.includes(action.lock)) {
+        log(s, `Kartu Berita ini tidak punya gembok [${action.lock}].`);
+        return s;
+      }
+      if (s.locksOpened.includes(action.lock)) {
+        log(s, `Gembok [${action.lock}] sudah terbuka.`);
+        return s;
+      }
+      if (isCategoryBlocked(s, action.lock)) {
+        log(s, `Gembok [${action.lock}] tidak bisa dibuka ronde ini.`);
+        return s;
+      }
+      if (isCategoryBlocked(s, card.category)) {
+        log(s, `Evidence kategori ${card.category} sedang tidak bisa dipakai.`);
+        return s;
+      }
+      const matches = card.isWildcard || card.category === action.lock;
       if (!matches) {
-        log(s, `"${card.title}" (${card.category}) doesn't match this event's locks.`);
+        log(s, `"${card.title}" (${card.category}) tidak cocok dengan gembok [${action.lock}].`);
         return s;
       }
       if (!removeFromHand(player, card.id)) return state;
-      s.evidenceDiscard.push(card.id);
-      const opened = card.isWildcard && !required.includes(card.category) ? required[0] : card.category;
-      if (!s.activeEventLocksOpened.includes(opened)) s.activeEventLocksOpened.push(opened);
-      log(s, `${player.name} plays "${card.title}" — the [${opened}] lock opens!`);
+      s.discards.evidence.push(card.id);
+      s.locksOpened.push(action.lock);
+      log(s, `${player.name} memasang "${card.title}" — gembok [${action.lock}] terbuka!`);
+
       if (card.bonus === "refund_ap") {
-        s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
-        log(s, `${player.name} gets 1 AP refunded (2-point bonus).`);
+        if (s.phase === "p3_turns") player.ap += 1;
+        else s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
+        log(s, `${player.name} mendapat 1 AP kembali (bonus kartu 2 poin).`);
       }
       if (card.bonus === "calm_nearest") {
         const v = nearestPanickedVillager(s, player.position);
         if (v) {
           calmVillager(v);
-          log(s, "The clear explanation calms the nearest panicked villager (2-point bonus).");
+          log(s, "Penjelasan yang jernih menenangkan warga panik terdekat.");
         }
       }
-      // requiredLocks is an OR — one opened lock resolves the event.
-      resolveEvent(s, "success");
+      // 🐒 Katalisator Informasi: a bartered card used to crack the news this round.
+      if (hasAbility(player, "network_sync") && player.escortBonusAp > 0) {
+        player.escortBonusAp -= 1;
+        bumpSubMission(s, player, "catalyst", 1);
+      }
+      refreshCollector(s);
       return s;
     }
 
-    case "DISCARD_EVIDENCE_FOR_RESOURCE": {
-      if (s.phase !== "phase2_verification" && s.phase !== "phase3_evacuation") return state;
+    case "DISCARD_FOR_RESOURCE": {
+      if (s.phase !== "p3_turns" && s.phase !== "p4_verdict") return state;
       const player = findPlayer(s, action.playerId);
-      const card = evidenceCardById[action.evidenceId];
+      const card = evidenceMap[action.evidenceId];
       if (!player || !card) return state;
-      if (s.phase === "phase3_evacuation" && player.id !== currentPlayer(s).id) return state;
-      if (card.resourceKind === "trade" && s.activeDisasterEffect?.roundEffectKey === "block_trade") {
-        log(s, "Total Gridlock! Cards can't be traded this round.");
+      const roundKey = s.activeDisaster?.roundEffectKey;
+      if (card.resourceKind === "trade" && roundKey === "block_trade") {
+        log(s, "Kemacetan total — kartu tidak bisa ditukar ronde ini.");
+        return s;
+      }
+      if (
+        (card.resourceKind === "ap2" || card.resourceKind === "alt_route") &&
+        roundKey === "no_evidence_move"
+      ) {
+        log(s, "Ronde ini Evidence tidak bisa dibuang untuk pergerakan.");
         return s;
       }
       if (!removeFromHand(player, card.id)) return state;
-      s.evidenceDiscard.push(card.id);
+      s.discards.evidence.push(card.id);
+
       switch (card.resourceKind) {
-        case "ap2":
-          if (s.phase === "phase3_evacuation") player.ap += 2;
+        case "ap2": {
+          if (s.phase === "p3_turns") player.ap += 2;
           else s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 2;
-          log(s, `${player.name} sprints — +2 AP!`);
+          log(s, `${player.name} melakukan Sprint Darurat — +2 AP!`);
           break;
-        case "alt_route":
+        }
+        case "alt_route": {
           player.altRouteReady = true;
-          log(s, `${player.name} scouts an alternate route — the next terrain penalty is ignored.`);
+          log(s, `${player.name} menemukan Jalur Alternatif — penalti berikutnya diabaikan.`);
           break;
+        }
         case "trade": {
           const other = action.tradeWithPlayerId ? findPlayer(s, action.tradeWithPlayerId) : undefined;
           if (other && other.id !== player.id && action.tradeGiveCardId) {
@@ -403,142 +912,199 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               const received = other.hand.shift();
               other.hand.push(action.tradeGiveCardId);
               if (received) player.hand.push(received);
-              log(s, `${player.name} trades a card with ${other.name}.`);
+              log(s, `${player.name} bertukar kartu dengan ${other.name} (Bantuan Logistik).`);
             }
           } else {
-            log(s, `${player.name} shares logistics info with the team.`);
+            log(s, `${player.name} membagikan info logistik ke tim.`);
           }
           break;
         }
         case "calm_free": {
-          let v: VillagerToken | null =
-            (action.targetVillagerId
-              ? s.tiles.flatMap((t) => t.occupants).find((x) => x.id === action.targetVillagerId)
-              : undefined) ?? null;
-          if (!v || v.status !== "panic") v = nearestPanickedVillager(s, player.position);
+          let v: VillagerToken | null = null;
+          if (action.targetVillagerId) {
+            for (const t of s.tiles) {
+              const found = t.occupants.find((o) => o.id === action.targetVillagerId);
+              if (found) v = found;
+            }
+          }
+          if (!v || v.status !== "panik") v = nearestPanickedVillager(s, player.position);
           if (v) {
             calmVillager(v);
-            log(s, `${player.name} uses the loudspeaker — a villager calms down (0 AP).`);
+            bumpSubMission(s, player, "calm_six", 1);
+            log(s, `${player.name} memakai Pengeras Suara — 1 warga tenang (0 AP).`);
           } else {
-            log(s, "No panicked villagers to calm right now.");
+            log(s, "Tidak ada warga panik untuk ditenangkan.");
           }
           break;
         }
-        case "panic_shield":
+        case "panic_shield": {
           s.panicShield = true;
-          log(s, `${player.name} steadies everyone's nerves — the Panic Meter won't rise this round.`);
+          log(s, `${player.name} memperkuat Ketahanan Mental — Meter Kepanikan tidak naik ronde ini.`);
           break;
+        }
       }
+      refreshCollector(s);
       return s;
     }
 
-    case "RESOLVE_VERIFICATION": {
-      if (s.phase !== "phase2_verification" || !s.activeEventCard) return state;
-      if (s.activeEventOutcome === "pending") resolveEvent(s, "ignored");
+    case "BARTER": {
+      if (s.phase !== "p3_turns") return state;
+      const player = findPlayer(s, action.playerId);
+      const active = currentPlayer(s);
+      const other = findPlayer(s, action.withPlayerId);
+      if (!player || !active || player.id !== active.id) return state;
+      if (!other || other.id === player.id) return state;
+      if (s.activeDisaster?.roundEffectKey === "block_trade") {
+        log(s, "Kemacetan total — barter tidak bisa dilakukan ronde ini.");
+        return s;
+      }
+      // 🐒 Sinyal Repeater: Monyet barters at any range; everyone else must share a tile.
+      if (!hasAbility(player, "network_sync") && player.position !== other.position) {
+        log(s, "Barter hanya bisa dengan pemain di ubin yang sama.");
+        return s;
+      }
+      if (player.ap < BARTER_COST) {
+        log(s, `AP tidak cukup untuk barter (butuh ${BARTER_COST}).`);
+        return s;
+      }
+      if (!player.hand.includes(action.giveCardId) || !other.hand.includes(action.takeCardId)) {
+        return state;
+      }
+      player.ap -= BARTER_COST;
+      removeFromHand(player, action.giveCardId);
+      removeFromHand(other, action.takeCardId);
+      player.hand.push(action.takeCardId);
+      other.hand.push(action.giveCardId);
+      if (hasAbility(player, "network_sync")) player.escortBonusAp += 1;
+      refreshCollector(s);
+      log(s, `${player.name} barter kartu dengan ${other.name}.`);
       return s;
     }
 
-    case "MOVE_PLAYER": {
-      if (s.phase !== "phase3_evacuation") return state;
-      const player = currentPlayer(s);
-      if (action.playerId !== player.id) return state;
-      const scenario = getScenario(s);
-      const target = s.tiles[action.targetTileIndex];
-      if (!target || !isPassable(target)) return state;
-      if (!isAdjacent(player.position, action.targetTileIndex, scenario)) return state;
-      const fromTile = s.tiles[player.position];
-      const cost = moveCost(s, fromTile, player);
-      if (player.ap < cost) {
-        log(s, `Not enough AP to move (needs ${cost}).`);
+    case "USE_ACTIVE_ABILITY": {
+      if (s.phase !== "p3_turns") return state;
+      const player = findPlayer(s, action.playerId);
+      if (!player) return state;
+      if (player.activeUsedThisRound) {
+        log(s, `${player.name} sudah memakai Kemampuan Aktif ronde ini.`);
         return s;
       }
-      if (player.altRouteReady && moveCost(s, fromTile) > gameConfig.moveCost) {
-        player.altRouteReady = false;
-        log(s, `${player.name} takes the alternate route — penalty ignored.`);
-      }
-      player.ap -= cost;
-      player.position = action.targetTileIndex;
-      return s;
-    }
+      const role = roleOf(player);
+      if (!role) return state;
 
-    case "CALM_VILLAGER": {
-      if (s.phase !== "phase3_evacuation") return state;
-      const player = currentPlayer(s);
-      if (action.playerId !== player.id) return state;
-      const tile = s.tiles[player.position];
-      const villager = tile.occupants.find((v) => v.id === action.villagerId);
-      if (!villager || villager.status !== "panic") return state;
-      if (tile.permanentPanic) {
-        log(s, "They won't listen! The hoax stuck — only special help (an ability or a free calm) works here.");
-        return s;
+      switch (role.activeKey) {
+        case "recon": {
+          const which = action.deck === "news" ? "news" : "disaster";
+          const deck = which === "news" ? s.decks.news : s.decks.disaster;
+          if (deck.length === 0) {
+            log(s, "Dek itu kosong — tidak ada yang bisa diintip.");
+            return s;
+          }
+          s.peek = { kind: which, cardId: deck[0] };
+          log(s, `${player.name} (Elang) melakukan Reconnaissance ke dek ${which}.`);
+          break;
+        }
+        case "data_mining": {
+          const news = s.activeNews;
+          const ids = action.evidenceIds ?? [];
+          const lock = action.lock;
+          if (!news || !lock || ids.length < 2) return state;
+          if (!news.locks.includes(lock) || s.locksOpened.includes(lock)) {
+            log(s, `Gembok [${lock}] tidak tersedia.`);
+            return s;
+          }
+          const snapshot = [...player.hand];
+          if (!ids.slice(0, 2).every((id) => removeFromHand(player, id))) {
+            player.hand = snapshot;
+            return state;
+          }
+          s.discards.evidence.push(...ids.slice(0, 2));
+          s.locksOpened.push(lock);
+          log(s, `${player.name} (Orangutan) Data Mining — gembok [${lock}] dibuka paksa!`);
+          refreshCollector(s);
+          break;
+        }
+        case "tactical_escort": {
+          player.escortBonusAp += 1;
+          log(s, `${player.name} (Harimau) siap Tactical Escort — +1 AP khusus evakuasi.`);
+          break;
+        }
+        case "network_sync": {
+          const other = action.targetPlayerId ? findPlayer(s, action.targetPlayerId) : undefined;
+          if (!other || other.id === player.id) return state;
+          s.peek = { kind: "hand", playerId: other.id };
+          const ids = action.evidenceIds ?? [];
+          if (ids.length >= 2) {
+            const [mine, theirs] = ids;
+            if (player.hand.includes(mine) && other.hand.includes(theirs)) {
+              removeFromHand(player, mine);
+              removeFromHand(other, theirs);
+              player.hand.push(theirs);
+              other.hand.push(mine);
+              refreshCollector(s);
+            }
+          }
+          log(s, `${player.name} (Monyet) Sinkronisasi Jaringan dengan ${other.name}.`);
+          break;
+        }
+        case "suppress": {
+          const tile = s.tiles[player.position];
+          let calmed = 0;
+          for (const v of tile?.occupants ?? []) {
+            if (calmed >= 3) break;
+            if (v.status === "panik") {
+              v.status = "tenang";
+              calmed += 1;
+            }
+          }
+          bumpSubMission(s, player, "calm_six", calmed);
+          // Komodo is the one escape hatch from a Crisis Token without
+          // verifying — it costs the team their whole once-per-round ability,
+          // so MIL stays the cheap path and this stays the emergency one.
+          const hadCrisis = !!tile?.hasCrisisToken;
+          if (tile) tile.hasCrisisToken = false;
+          log(
+            s,
+            `${player.name} (Komodo) Menekan Histeria — ${calmed} warga jadi tenang` +
+              (hadCrisis ? ", Token Krisis di ubin ini dicabut." : ".")
+          );
+          break;
+        }
+        default:
+          return state;
       }
-      const cost = calmCost(s);
-      if (player.ap < cost) {
-        log(s, `Not enough AP to calm (needs ${cost}).`);
-        return s;
-      }
-      player.ap -= cost;
-      villager.status = "normal";
-      log(s, `${player.name} calms a villager down.`);
-      return s;
-    }
-
-    case "ESCORT_VILLAGER": {
-      if (s.phase !== "phase3_evacuation") return state;
-      const player = currentPlayer(s);
-      if (action.playerId !== player.id) return state;
-      const scenario = getScenario(s);
-      const fromTile = s.tiles[player.position];
-      const target = s.tiles[action.targetTileIndex];
-      if (!target || !isPassable(target)) return state;
-      if (!isAdjacent(player.position, action.targetTileIndex, scenario)) return state;
-      const villager = fromTile.occupants.find((v) => v.id === action.villagerId);
-      if (!villager) return state;
-      if (villager.status !== "normal") {
-        log(s, "Panicked villagers won't follow — calm them first!");
-        return s;
-      }
-      if (escortBlocked(s, fromTile, target)) {
-        log(s, "Liquefaction! Nobody can be escorted through the sinking city this round.");
-        return s;
-      }
-      let cost = escortCost(s, fromTile, player);
-      if (s.tigerEscortBonus[player.id]) cost = Math.max(0, cost - 1);
-      if (player.ap < cost) {
-        log(s, `Not enough AP to escort (needs ${cost}).`);
-        return s;
-      }
-      if (s.tigerEscortBonus[player.id]) {
-        s.tigerEscortBonus[player.id] = false;
-        log(s, `${player.name} (Tiger) leads the evacuation — escort discount used!`);
-      }
-      if (player.altRouteReady && escortCost(s, fromTile) > gameConfig.escortCost) {
-        player.altRouteReady = false;
-      }
-      player.ap -= cost;
-      fromTile.occupants = fromTile.occupants.filter((v) => v.id !== villager.id);
-      player.position = action.targetTileIndex;
-      if (isSafeZone(target)) {
-        villager.status = "evacuated";
-        villager.tileIndex = action.targetTileIndex;
-        s.evacuees.push(villager);
-        log(s, `${player.name} escorts a villager to safety! (${s.evacuees.length}/${scenarioById[s.scenarioId].targetEvacuation})`);
-        applyGameOverCheck(s);
-      } else {
-        villager.tileIndex = action.targetTileIndex;
-        target.occupants.push(villager);
-        log(s, `${player.name} escorts a villager toward safety.`);
-      }
+      player.activeUsedThisRound = true;
       return s;
     }
 
     case "END_PLAYER_TURN": {
-      if (s.phase !== "phase3_evacuation") return state;
+      if (s.phase !== "p3_turns") return state;
       const player = currentPlayer(s);
+      if (!player) return state;
+
+      const limit = handLimit(s, player);
+      while (player.hand.length > limit) {
+        const dropped = player.hand.pop()!;
+        s.discards.evidence.push(dropped);
+        log(s, `${player.name} melebihi batas tangan (${limit}) — 1 kartu dibuang.`);
+      }
+      refreshCollector(s);
+
+      const tile = s.tiles[player.position];
+      // 🦅 Pemetaan Kritis: end a turn on 3 different damaged tiles.
+      if (tile && tile.damage > 0 && !player.damagedTilesVisited.includes(tile.index)) {
+        player.damagedTilesVisited.push(tile.index);
+        bumpSubMission(s, player, "map_damaged", 1);
+      }
+      // Pos Siaga bonus stage.
+      if (tile?.isPosSiaga) {
+        s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
+        log(s, `${player.name} beristirahat di Pos Siaga — +1 AP ronde berikutnya.`);
+      }
+
       if (!s.playersEndedTurn.includes(player.id)) s.playersEndedTurn.push(player.id);
       if (s.playersEndedTurn.length >= s.players.length) {
-        s.phase = "phase4_escalation";
-        log(s, "All Guardians have acted. The Ring of Fire stirs…");
+        enterVerdictPhase(s);
         return s;
       }
       for (let step = 1; step <= s.players.length; step++) {
@@ -548,130 +1114,79 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           break;
         }
       }
-      log(s, `${currentPlayer(s).name}'s turn.`);
+      const nextUp = currentPlayer(s);
+      if (nextUp) log(s, `Giliran ${nextUp.name}.`);
       return s;
     }
 
-    case "DRAW_DISASTER_CARD": {
-      if (s.phase !== "phase4_escalation" || s.incomingDisaster) return state;
-      if (s.disasterDeck.length === 0) {
-        s.gameOverReason = "timeout";
-        s.phase = "game_over";
-        log(s, "The Disaster Deck is empty — the megathrust arrives. Time has run out.");
+    // ——— Fase 4 — Sidang Fakta (Commit & Flip) ————————————————————————
+    case "COMMIT_VERDICT": {
+      if (s.phase !== "p4_verdict") return state;
+      if (s.verdict !== null) return state; // immutable once committed
+      if (!s.activeNews) return state;
+      s.verdict = action.verdict;
+      log(s, `Vonis tim: ${action.verdict.toUpperCase()}. Tidak bisa diubah lagi.`);
+      return s;
+    }
+
+    case "FLIP_NEWS": {
+      if (s.phase !== "p4_verdict") return state;
+      if (!s.activeNews || s.newsRevealed) return state;
+      if (s.verdict === null) {
+        log(s, "Ucapkan vonis dulu sebelum membalik kartu.");
         return s;
       }
-      const id = s.disasterDeck.shift()!;
-      const card = disasterCardById[id];
-      s.incomingDisaster = card;
-      log(s, `Disaster: "${card.title}" — its effect looms over the next round.`);
-      if (card.destroysTile) {
-        const tileIndex = s.tiles.findIndex(
-          (t) => card.affectedTileTypeIds.includes(t.typeId) && t.status === "normal"
-        );
-        if (tileIndex >= 0) {
-          const tile = s.tiles[tileIndex];
-          tile.status = "destroyed";
-          tile.hasCrisisToken = false;
-          for (const v of tile.occupants) {
-            v.status = "lost";
-            s.casualties.push(v);
-          }
-          const lostCount = tile.occupants.length;
-          tile.occupants = [];
-          log(
-            s,
-            lostCount > 0
-              ? `A tile is swept away — ${lostCount} villager${lostCount > 1 ? "s" : ""} lost!`
-              : "A tile is swept away — thankfully nobody was left there."
-          );
-          // Guardians on the tile scramble to an adjacent tile (never casualties).
-          const scenario = getScenario(s);
-          for (const p of s.players) {
-            if (p.position === tileIndex) {
-              const escape = adjacentIndices(tileIndex, scenario.cols, scenario.rows).find(
-                (n) => isPassable(s.tiles[n])
-              );
-              p.position = escape ?? Math.max(0, s.tiles.findIndex((t) => t.typeId === "safe_zone"));
-              log(s, `${p.name} scrambles clear just in time!`);
-            }
-          }
-        }
+      resolveFlip(s);
+      return s;
+    }
+
+    // ——— Fase 5 — Dampak & Eskalasi ——————————————————————————————————
+    case "BUY_REWARD": {
+      if (s.phase !== "p5_impact") return state;
+      const card = rewardMap[action.rewardId];
+      if (!card) return state;
+      if (s.ownedRewards.includes(card.id)) {
+        log(s, `"${card.title}" sudah dimiliki tim.`);
+        return s;
       }
-      if (card.roundEffectKey === "peek_disaster" && s.disasterDeck.length > 0) {
-        s.peek = { kind: "disaster", cardId: s.disasterDeck[0] };
+      if (s.reputation < card.cost) {
+        log(s, `Poin Reputasi tidak cukup untuk "${card.title}" (butuh ${card.cost}).`);
+        return s;
       }
-      applyGameOverCheck(s);
-      if (s.gameOverReason === null && s.disasterDeck.length === 0) {
-        const scenario = getScenario(s);
-        if (s.evacuees.length < scenario.targetEvacuation) {
-          s.gameOverReason = "timeout";
-          s.phase = "game_over";
-          log(s, "That was the final disaster card — the evacuation target wasn't met. Time out!");
-        }
+      s.reputation -= card.cost;
+      s.ownedRewards.push(card.id);
+      log(s, `Tim membeli "${card.title}" (-${card.cost} Reputasi).`);
+      if (card.effectKey === "clear_chaos" && s.activeChaos.length > 0) {
+        const removed = s.activeChaos.shift()!;
+        const removedCard = chaosMap[removed];
+        log(s, `Klinik Lapangan menebus Kartu Chaos "${removedCard?.title ?? removed}".`);
       }
       return s;
     }
 
     case "ADVANCE_PHASE": {
       switch (s.phase) {
-        case "phase1_influx":
-          if (!s.activeEventCard) return state;
-          s.phase = "phase2_verification";
-          log(s, "Verification phase — is this news real? Check the evidence!");
+        case "p1_disaster":
+          if (!s.activeDisaster) return state;
+          s.phase = "p2_news";
+          log(s, "Fase 2 — Kabar Mengudara.");
           return s;
-        case "phase2_verification":
-          if (s.activeEventOutcome === "pending") resolveEvent(s, "ignored");
-          if (s.gameOverReason !== null) return s;
-          if (s.activeEventCard) s.eventDiscard.push(s.activeEventCard.id);
-          enterEvacuationPhase(s);
+        case "p2_news":
+          if (!s.activeNews) return state;
+          enterTurnsPhase(s);
           return s;
-        case "phase3_evacuation":
-          s.phase = "phase4_escalation";
-          log(s, "The Ring of Fire stirs…");
+        case "p3_turns":
+          enterVerdictPhase(s);
           return s;
-        case "phase4_escalation":
-          if (!s.incomingDisaster) return state;
+        case "p4_verdict":
+          enterImpactPhase(s);
+          return s;
+        case "p5_impact":
           startNextRound(s);
           return s;
         default:
           return state;
       }
-    }
-
-    case "USE_ROLE_ABILITY": {
-      if (s.phase === "game_over" || s.phase === "setup") return state;
-      const player = findPlayer(s, action.playerId);
-      if (!player) return state;
-      if (s.abilityUsed[player.id]) {
-        log(s, `${player.name} already used their ability this round.`);
-        return s;
-      }
-      const role = roleById[player.roleId];
-      switch (role?.abilityType) {
-        case "peek_disaster":
-          if (s.disasterDeck.length === 0) return state;
-          s.peek = { kind: "disaster", cardId: s.disasterDeck[0] };
-          log(s, `${player.name} (Eagle) scouts ahead at the Disaster Deck.`);
-          break;
-        case "peek_event":
-          if (s.eventDeck.length === 0) return state;
-          s.peek = { kind: "event", cardId: s.eventDeck[0] };
-          log(s, `${player.name} (Orangutan) studies the next incoming news.`);
-          break;
-        case "cancel_panic": {
-          const tile = s.tiles[player.position];
-          tile.occupants.forEach(calmVillager);
-          tile.hasCrisisToken = false;
-          tile.permanentPanic = false;
-          log(s, `${player.name} (Komodo Dragon) grounds the panic on their tile.`);
-          break;
-        }
-        default:
-          log(s, `${role?.name}'s ability is passive — it's always working.`);
-          return s;
-      }
-      s.abilityUsed[player.id] = true;
-      return s;
     }
 
     case "CLEAR_PEEK": {
@@ -680,32 +1195,41 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       return s;
     }
 
-    // ——— Debug / playtest actions ———
+    // ——— Debug / playtest ————————————————————————————————————————————
     case "DEBUG_SET_PANIC": {
       s.panicMeter = Math.max(0, Math.min(s.panicMeterMax, action.value));
-      log(s, `[debug] Panic Meter set to ${s.panicMeter}.`);
+      log(s, `[debug] Meter Kepanikan = ${s.panicMeter}.`);
       applyGameOverCheck(s);
       return s;
     }
-    case "DEBUG_SET_PHASE": {
-      s.phase = action.phase as GamePhase;
-      if (s.phase === "phase3_evacuation") enterEvacuationPhase(s);
-      log(s, `[debug] Phase set to ${action.phase}.`);
+    case "DEBUG_SET_REPUTATION": {
+      s.reputation = Math.max(0, action.value);
+      log(s, `[debug] Poin Reputasi = ${s.reputation}.`);
       return s;
     }
-    case "DEBUG_SET_EVENT_TOP": {
-      s.eventDeck = [action.cardId, ...s.eventDeck.filter((id) => id !== action.cardId)];
-      log(s, `[debug] Event deck top set to ${action.cardId}.`);
+    case "DEBUG_SET_PHASE": {
+      if (action.phase === "p3_turns") {
+        enterTurnsPhase(s);
+      } else {
+        s.phase = action.phase;
+      }
+      if (s.phase !== "game_over") s.gameOverReason = null;
+      log(s, `[debug] Fase = ${action.phase}.`);
+      return s;
+    }
+    case "DEBUG_SET_NEWS_TOP": {
+      s.decks.news = [action.cardId, ...s.decks.news.filter((id) => id !== action.cardId)];
+      log(s, `[debug] Dek Berita paling atas = ${action.cardId}.`);
       return s;
     }
     case "DEBUG_SET_DISASTER_TOP": {
-      s.disasterDeck = [action.cardId, ...s.disasterDeck.filter((id) => id !== action.cardId)];
-      log(s, `[debug] Disaster deck top set to ${action.cardId}.`);
+      s.decks.disaster = [action.cardId, ...s.decks.disaster.filter((id) => id !== action.cardId)];
+      log(s, `[debug] Dek Bencana paling atas = ${action.cardId}.`);
       return s;
     }
-    case "DEBUG_EMPTY_DISASTER_DECK": {
-      s.disasterDeck = s.disasterDeck.slice(0, 1);
-      log(s, `[debug] Disaster deck trimmed to 1 card.`);
+    case "DEBUG_TRIM_DISASTER_DECK": {
+      s.decks.disaster = s.decks.disaster.slice(0, 1);
+      log(s, "[debug] Dek Bencana dipangkas menjadi 1 kartu.");
       return s;
     }
 

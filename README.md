@@ -19,7 +19,7 @@ The rules engine (`engine/`) is a pure `(state, action) => state` reducer with *
 ```bash
 npm install
 npm run dev      # http://localhost:3000
-npm test         # rules-engine unit tests (18)
+npm test         # rules-engine unit tests + balance guards (49)
 npm run build    # production build
 ```
 
@@ -38,7 +38,8 @@ components/     board/ (map + tiles), hud/, cards/, ui/, modals
 engine/         types.ts, reducer.ts (pure), rules.ts, engine.test.ts
 data/           eventCards, evidenceCards, disasterCards, roles, tileTypes, scenarios, gameConfig
 store/          gameStore.ts (Zustand + persist)
-lib/i18n/en.ts  all UI copy (card content lives in data/)
+lib/i18n/id.ts  all UI copy, Bahasa Indonesia (card content lives in data/)
+lib/engineBridge.ts  the single seam between UI and engine helpers
 ```
 
 `PLAN.md` tracks the build chunks; `DECISIONS.md` logs every design assumption.
@@ -66,4 +67,20 @@ No env vars are needed for the current single-device (pass-and-play) build. If y
 
 ## How to play (short version)
 
-Each round has 4 phases: **Incoming Crisis** (a news card appears and villagers panic) → **Filter Hoax vs. Fact** (play one matching Evidence card to open a 5W1H lock and reveal the truth) → **Rescue Action** (spend Action Points to move, calm, and escort villagers to a Safe Zone) → **The Ring of Fire's Wrath** (a Disaster card twists the next round and can destroy a tile). Evacuate 8 of 15 villagers before the Disaster Deck runs out. Keep the Panic Meter below 5. See the in-game **How to Play** page for the full rules.
+The board **is** the Ring of Fire: 28 hexagonal tiles in a closed ring — four coloured sectors of six tiles each, separated by four **Pos Siaga** checkpoints, with four dashed **Sea Route** arcs cutting between adjacent checkpoints. The Zona Krisis in the middle holds the round's Disaster and News cards.
+
+Each round runs five phases: **1 Murka Cincin Api** (a Disaster card rewrites this round's rules) → **2 Kabar Mengudara** (a News card lands, villagers panic, a Crisis Token drops) → **3 Giliran Pemain** (4 AP each: move, calm, escort, investigate, play evidence onto the news card's two 5W1H locks) → **4 Sidang Fakta** (**Commit & Flip**) → **5 Dampak & Eskalasi** (tile damage, buy Rewards with Reputation, check win/lose).
+
+**Commit & Flip** is the core mechanic. The team must lock in a verdict — HOAKS, FAKTA, or Abstain — *before* the card is turned over, and the answer plus its scientific explanation is printed on the back. Three outcomes follow:
+
+| Outcome | Condition | Result |
+|---|---|---|
+| **Terverifikasi** | Verdict correct **and** both locks opened | +1 Reputation, Crisis Token cleared |
+| **Tebakan Beruntung** | Verdict correct but locks incomplete | **Nothing.** Guessing right is not literacy. |
+| **Hoaks Menyebar** | Verdict wrong, or Abstain | +1 Panic, draw a Chaos card |
+
+Evacuate **10 of 16** villagers to a Pos Siaga before the Disaster deck runs out. Lose if Panic hits 8, if too few villagers remain to reach the target, or if time runs out.
+
+A **Crisis Token locks evacuation out of its tile** — villagers are too agitated by an unresolved rumour to be led anywhere, and calming them one by one does not remove it. Only a successful verification (or the Komodo's once-per-round ability) clears it. This is what keeps media literacy load-bearing rather than decorative: `engine/balance.test.ts` asserts that a team ignoring verification loses almost every game.
+
+See the in-game **Cara Main** page, or `../docs/Panduan-Ring-of-Fire.docx` for the full physical rulebook.

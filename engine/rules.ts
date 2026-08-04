@@ -1,8 +1,93 @@
-// Pure rules helpers — no DOM, no React, 100% unit-testable.
-import type { GameOverReason, GameState, Player, Scenario, TileState, VillagerToken } from "./types";
+// ============================================================================
+// RING OF FIRE v2 — pure rules helpers.
+// No DOM, no React, no I/O, no Math.random. 100% unit-testable.
+// Canonical rules: E:\archives\ringoffire\docs\00-MASTER-SPEC-v2.md
+// ============================================================================
+import type {
+  ActiveAbilityKey,
+  ChaosCard,
+  ChaosEffectKey,
+  EvidenceCategory,
+  GameOverReason,
+  GameState,
+  Player,
+  RewardEffectKey,
+  Role,
+  Scenario,
+  SectorId,
+  TileState,
+  VerdictOutcome,
+  VillagerToken,
+} from "./types";
 import { gameConfig } from "@/data/gameConfig";
-import { tileTypeById } from "@/data/tileTypes";
 import { scenarioById } from "@/data/scenarios";
+import { roleById } from "@/data/roles";
+import { chaosCardById } from "@/data/chaosCards";
+import { rewardCardById } from "@/data/rewardCards";
+
+// ——— Tunables ————————————————————————————————————————————————————————
+// Balance numbers live in data/gameConfig.ts, but the engine keeps v2 defaults
+// so it stays correct even while the data lane is mid-rewrite.
+
+const rawConfig = gameConfig as unknown as Record<string, unknown>;
+
+function cfg(key: string, fallback: number): number {
+  const v = rawConfig[key];
+  return typeof v === "number" ? v : fallback;
+}
+
+/** 4 AP per player per round (v2). */
+export const BASE_AP = cfg("baseAP", 4);
+export const STARTING_HAND = cfg("startingHandSize", 4);
+export const HAND_LIMIT = cfg("handLimit", 4);
+export const HAND_LIMIT_SCHOLAR = cfg("handLimitScholar", 6);
+export const MOVE_COST = cfg("moveCost", 1);
+export const RETAK_MOVE_COST = cfg("moveCostRetak", 2);
+export const SEA_ROUTE_COST = cfg("seaRouteCost", 2);
+export const ESCORT_COST = cfg("escortCost", 1);
+export const CALM_COST = cfg("calmCost", 2);
+export const CALM_COST_STORM = cfg("calmCostStorm", 3);
+export const INVESTIGATE_COST = cfg("investigateCost", 1);
+export const BARTER_COST = cfg("barterCost", 1);
+export const SUB_MISSION_REPUTATION = cfg("reputationPerSubMission", 2);
+
+export interface DifficultyPreset {
+  targetEvacuation: number;
+  panicMeterMax: number;
+  disasterDeckSize: number;
+}
+
+const DEFAULT_PRESETS: Record<GameState["difficulty"], DifficultyPreset> = {
+  siaga: { targetEvacuation: 8, panicMeterMax: 10, disasterDeckSize: 18 },
+  awas: { targetEvacuation: 10, panicMeterMax: 8, disasterDeckSize: 16 },
+  darurat: { targetEvacuation: 12, panicMeterMax: 6, disasterDeckSize: 14 },
+};
+
+/** data/gameConfig may ship its own presets; merge them over the defaults. */
+export const DIFFICULTY_PRESETS: Record<GameState["difficulty"], DifficultyPreset> = (() => {
+  const override = (rawConfig["difficulties"] ?? rawConfig["difficultyPresets"]) as
+    | Partial<Record<GameState["difficulty"], Partial<DifficultyPreset>>>
+    | undefined;
+  const out = { ...DEFAULT_PRESETS };
+  if (override && typeof override === "object") {
+    for (const key of Object.keys(out) as GameState["difficulty"][]) {
+      const patch = override[key];
+      if (patch && typeof patch === "object") out[key] = { ...out[key], ...patch };
+    }
+  }
+  return out;
+})();
+
+export function difficultyPreset(state: GameState): DifficultyPreset {
+  return DIFFICULTY_PRESETS[state.difficulty] ?? DEFAULT_PRESETS.awas;
+}
+
+/** How many villagers must reach a Pos Siaga to win. */
+export function targetEvacuation(state: GameState): number {
+  return difficultyPreset(state).targetEvacuation;
+}
+
+// ——— PRNG ————————————————————————————————————————————————————————————
 
 /** Deterministic PRNG (mulberry32). */
 export function mulberry32(seed: number): () => number {
@@ -27,94 +112,257 @@ export function shuffled<T>(arr: T[], seed: number): T[] {
   return out;
 }
 
+// ——— Scenario / roles ————————————————————————————————————————————————
+
 export function getScenario(state: GameState): Scenario {
-  return scenarioById[state.scenarioId];
+  const map = scenarioById as unknown as Record<string, Scenario | undefined>;
+  return map[state.scenarioId] ?? (Object.values(map)[0] as Scenario);
 }
 
-/** Orthogonal neighbors on the scenario grid. */
-export function adjacentIndices(index: number, cols: number, rows: number): number[] {
-  const row = Math.floor(index / cols);
-  const col = index % cols;
+export function roleOf(player: Player): Role | undefined {
+  return (roleById as unknown as Record<string, Role | undefined>)[player.roleId];
+}
+
+/** Roles are identified by their FROZEN ability key, never by a data id string. */
+export function hasAbility(player: Player, key: ActiveAbilityKey): boolean {
+  return roleOf(player)?.activeKey === key;
+}
+
+/** 🦅 Elang — Navigasi Udara: immune to disaster movement penalties and Retak surcharges. */
+export function isAirborne(player?: Player): boolean {
+  return !!player && hasAbility(player, "recon");
+}
+
+// ——— Ring topology ——————————————————————————————————————————————————
+
+export function ringSize(state: GameState): number {
+  return state.tiles.length;
+}
+
+/** The rim is a closed loop: (i-1+N)%N and (i+1)%N. */
+export function rimNeighbors(i: number, size: number): number[] {
+  if (size <= 0) return [];
+  if (size === 1) return [];
+  const prev = (i - 1 + size) % size;
+  const next = (i + 1) % size;
+  return prev === next ? [prev] : [prev, next];
+}
+
+/** The 4 Sea Route edges, each joining two ADJACENT Pos Siaga. */
+export function seaRouteNeighbors(i: number, scenario: Scenario): number[] {
+  const routes = scenario?.seaRoutes ?? [];
   const out: number[] = [];
-  if (row > 0) out.push(index - cols);
-  if (row < rows - 1) out.push(index + cols);
-  if (col > 0) out.push(index - 1);
-  if (col < cols - 1) out.push(index + 1);
+  for (const [a, b] of routes) {
+    if (a === i && !out.includes(b)) out.push(b);
+    if (b === i && !out.includes(a)) out.push(a);
+  }
   return out;
 }
 
-export function isAdjacent(a: number, b: number, scenario: Scenario): boolean {
-  return adjacentIndices(a, scenario.cols, scenario.rows).includes(b);
+/** Sea Routes shut completely while an Oseanografi disaster is active. */
+export function isSeaRouteOpen(state: GameState): boolean {
+  if (state.activeDisaster?.category === "oseanografi") return false;
+  return state.seaRouteOpen !== false;
 }
 
-export function isSafeZone(tile: TileState): boolean {
-  return !!tileTypeById[tile.typeId]?.isSafeZone;
+/** Rim neighbours plus any currently-open sea route neighbours. */
+export function allNeighbors(state: GameState, i: number): number[] {
+  const out = rimNeighbors(i, ringSize(state));
+  if (isSeaRouteOpen(state)) {
+    for (const n of seaRouteNeighbors(i, getScenario(state))) {
+      if (!out.includes(n)) out.push(n);
+    }
+  }
+  return out;
 }
 
-/** Ocean tiles are board water — never enterable, never traversable. */
-export function isPassable(tile: TileState): boolean {
-  return tile.status === "normal" && tile.typeId !== "ocean";
+export function areRimAdjacent(state: GameState, a: number, b: number): boolean {
+  return rimNeighbors(a, ringSize(state)).includes(b);
+}
+
+export function areSeaRouteLinked(state: GameState, a: number, b: number): boolean {
+  return seaRouteNeighbors(a, getScenario(state)).includes(b);
+}
+
+// ——— Tiles & villagers ————————————————————————————————————————————————
+
+/** Hancur (damage 2) tiles can never be entered. Pos Siaga is damage-immune. */
+export function isPassable(tile: TileState | undefined): boolean {
+  if (!tile) return false;
+  if (tile.isPosSiaga) return true;
+  return tile.damage < 2;
+}
+
+export function isPosSiaga(tile: TileState | undefined): boolean {
+  return !!tile?.isPosSiaga;
 }
 
 export function villagersOnBoard(state: GameState): VillagerToken[] {
   return state.tiles.flatMap((t) => t.occupants);
 }
 
-/** AP cost to move (or escort) from one tile to an adjacent tile. */
-export function moveCost(state: GameState, fromTile: TileState, player?: Player): number {
-  let cost = gameConfig.moveCost;
-  const effect = state.activeDisasterEffect;
-  if (effect?.roundEffectKey === "move_penalty") cost += 1;
-  if (effect?.roundEffectKey === "coast_exit_penalty" && fromTile.typeId === "coast") cost += 1;
-  // "Alternate Route" cancels the terrain/weather penalty for one move.
-  if (player?.altRouteReady && cost > gameConfig.moveCost) cost = gameConfig.moveCost;
-  return cost;
+export function findVillager(state: GameState, id: string): VillagerToken | undefined {
+  for (const tile of state.tiles) {
+    const v = tile.occupants.find((o) => o.id === id);
+    if (v) return v;
+  }
+  return undefined;
 }
 
-export function calmCost(state: GameState): number {
-  return state.activeDisasterEffect?.roundEffectKey === "calm_cost_up"
-    ? gameConfig.calmCostStorm
-    : gameConfig.calmCost;
+export function sectorTiles(state: GameState, sectorId: SectorId): TileState[] {
+  return state.tiles.filter((t) => t.sectorId === sectorId);
 }
 
-/** Escort = walking together, so movement penalties apply on top of the base cost. */
-export function escortCost(state: GameState, fromTile: TileState, player?: Player): number {
-  const movePenalty = moveCost(state, fromTile, player) - gameConfig.moveCost;
-  return gameConfig.escortCost + movePenalty;
+/** `affectedSectorIds: []` on a disaster card means "every sector". */
+export function isSectorAffected(state: GameState, sectorId: SectorId | null): boolean {
+  const d = state.activeDisaster;
+  if (!d) return false;
+  if (!d.affectedSectorIds || d.affectedSectorIds.length === 0) return true;
+  return sectorId !== null && d.affectedSectorIds.includes(sectorId);
 }
 
-export function escortBlocked(state: GameState, fromTile: TileState, toTile: TileState): boolean {
-  const effect = state.activeDisasterEffect;
-  if (effect?.roundEffectKey !== "block_escort") return false;
-  return (
-    effect.affectedTileTypeIds.includes(fromTile.typeId) ||
-    effect.affectedTileTypeIds.includes(toTile.typeId)
-  );
+// ——— Chaos & Rewards ——————————————————————————————————————————————————
+
+export function activeChaosCards(state: GameState): ChaosCard[] {
+  const map = chaosCardById as unknown as Record<string, ChaosCard | undefined>;
+  return state.activeChaos.map((id) => map[id]).filter((c): c is ChaosCard => !!c);
+}
+
+export function hasChaos(state: GameState, key: ChaosEffectKey): boolean {
+  return activeChaosCards(state).some((c) => c.effectKey === key);
+}
+
+export function hasReward(state: GameState, key: RewardEffectKey): boolean {
+  const map = rewardCardById as unknown as Record<string, { effectKey: RewardEffectKey } | undefined>;
+  return state.ownedRewards.some((id) => map[id]?.effectKey === key);
 }
 
 /**
- * The three lose conditions + the win condition (spec 5.5–5.6).
- * `deckExhausted` = the last disaster card has been drawn and resolved.
+ * Put a Chaos card into force and apply its one-shot part.
+ * Mutates the working clone — the reducer only ever calls this on its own copy.
  */
-export function checkGameOver(state: GameState): { over: boolean; reason?: GameOverReason } {
-  const scenario = getScenario(state);
-  if (state.evacuees.length >= scenario.targetEvacuation) return { over: true, reason: "win" };
-  if (state.panicMeter >= state.panicMeterMax) return { over: true, reason: "panic" };
-  const stillPossible = state.evacuees.length + villagersOnBoard(state).length;
-  if (stillPossible < scenario.targetEvacuation) return { over: true, reason: "casualties" };
-  return { over: false };
+export function applyChaos(state: GameState, chaosId: string): ChaosCard | undefined {
+  const map = chaosCardById as unknown as Record<string, ChaosCard | undefined>;
+  const card = map[chaosId];
+  if (!card) return undefined;
+  if (!state.activeChaos.includes(chaosId)) state.activeChaos.push(chaosId);
+  // The only Chaos effect that resolves immediately; the rest are standing rules
+  // consulted by hasChaos() wherever they bite.
+  if (card.effectKey === "reputation_tax") {
+    state.reputation = Math.max(0, state.reputation - 1);
+  }
+  return card;
 }
 
-/** Step a tile index one tile toward the nearest safe zone (BFS over normal tiles). */
-export function stepTowardNearestSafeZone(state: GameState, from: number): number | null {
-  const scenario = getScenario(state);
+/** Evidence of this category cannot be played onto a lock right now. */
+export function isCategoryBlocked(state: GameState, category: EvidenceCategory): boolean {
+  if (state.activeDisaster?.roundEffectKey === "block_where" && category === "WHERE") return true;
+  return activeChaosCards(state).some(
+    (c) => c.effectKey === "block_category" && c.blockedCategory === category
+  );
+}
+
+// ——— Costs ————————————————————————————————————————————————————————————
+
+/** AP a player starts Fase 3 with: 4 ± pending bonuses, Rewards and Chaos. */
+export function startingAp(state: GameState, player: Player): number {
+  let ap = BASE_AP + (state.pendingApBonus[player.id] ?? 0);
+  if (hasReward(state, "ap_up")) ap += 1;
+  if (hasChaos(state, "ap_down")) ap -= 1;
+  return Math.max(0, ap);
+}
+
+/** 🦧 Orangutan holds 6; everyone else 4, modified by Reward/Chaos. */
+export function handLimit(state: GameState, player: Player): number {
+  let limit = hasAbility(player, "data_mining") ? HAND_LIMIT_SCHOLAR : HAND_LIMIT;
+  if (hasReward(state, "hand_limit_up")) limit += 2;
+  if (hasChaos(state, "hand_limit_down")) limit -= 1;
+  return Math.max(1, limit);
+}
+
+/** AP for one Sea Route hop — 2, or 1 once the team owns "Peta Evakuasi". */
+export function seaRouteCost(state: GameState): number {
+  return hasReward(state, "sea_route_cheap") ? 1 : SEA_ROUTE_COST;
+}
+
+function terrainAndWeather(
+  state: GameState,
+  fromIndex: number,
+  toIndex: number,
+  player: Player | undefined,
+  viaSeaRoute: boolean
+): number {
+  if (isAirborne(player)) return 0; // Elang ignores terrain + weather entirely
+  let extra = 0;
+  const to = state.tiles[toIndex];
+  const from = state.tiles[fromIndex];
+  if (!viaSeaRoute && to && to.damage === 1) extra += RETAK_MOVE_COST - MOVE_COST;
+  const key = state.activeDisaster?.roundEffectKey;
+  if (key === "move_penalty") extra += 1;
+  if (key === "coast_exit_penalty" && from && isSectorAffected(state, from.sectorId)) extra += 1;
+  return extra;
+}
+
+/** AP to walk from one tile to a neighbouring tile. */
+export function moveCost(
+  state: GameState,
+  fromIndex: number,
+  toIndex: number,
+  player?: Player,
+  viaSeaRoute = false
+): number {
+  const base = viaSeaRoute ? seaRouteCost(state) : MOVE_COST;
+  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaRoute);
+  // "Jalur Alternatif" cancels one terrain/weather penalty.
+  if (player?.altRouteReady && extra > 0) extra = 0;
+  return Math.max(0, base + extra);
+}
+
+/** AP to walk a villager (or two, if Harimau) to a neighbouring tile. */
+export function escortCost(
+  state: GameState,
+  fromIndex: number,
+  toIndex: number,
+  player?: Player,
+  viaSeaRoute = false
+): number {
+  const base = viaSeaRoute ? seaRouteCost(state) : ESCORT_COST;
+  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaRoute);
+  if (player?.altRouteReady && extra > 0) extra = 0;
+  return Math.max(0, base + extra);
+}
+
+/** AP to turn one Panik villager Tenang. */
+export function calmCost(state: GameState): number {
+  let cost = state.activeDisaster?.roundEffectKey === "calm_cost_up" ? CALM_COST_STORM : CALM_COST;
+  if (hasChaos(state, "calm_cost_up_perm")) cost += 1;
+  if (hasReward(state, "calm_cheap")) cost -= 1;
+  return Math.max(1, cost);
+}
+
+/** Escort is blocked in/out of a sector the active disaster has cut off. */
+export function escortBlocked(state: GameState, from: TileState, to: TileState): boolean {
+  if (from.evacuationLocked) return true;
+  if (state.activeDisaster?.roundEffectKey !== "block_escort") return false;
+  return isSectorAffected(state, from.sectorId) || isSectorAffected(state, to.sectorId);
+}
+
+/** How many villagers one escort action may take. */
+export function maxEscortGroup(player: Player | undefined, viaSeaRoute: boolean): number {
+  if (viaSeaRoute) return 1; // Rute Laut: maks 1 warga, always
+  return player && hasAbility(player, "tactical_escort") ? 2 : 1;
+}
+
+// ——— Pathing ——————————————————————————————————————————————————————————
+
+/** One step from `from` toward the nearest Pos Siaga. BFS over passable tiles. */
+export function stepTowardNearestPosSiaga(state: GameState, from: number): number | null {
   const visited = new Set<number>([from]);
   const queue: { index: number; first: number | null }[] = [{ index: from, first: null }];
   while (queue.length > 0) {
     const { index, first } = queue.shift()!;
-    const tile = state.tiles[index];
-    if (index !== from && isSafeZone(tile)) return first;
-    for (const n of adjacentIndices(index, scenario.cols, scenario.rows)) {
+    if (index !== from && isPosSiaga(state.tiles[index])) return first;
+    for (const n of allNeighbors(state, index)) {
       if (visited.has(n)) continue;
       if (!isPassable(state.tiles[n])) continue;
       visited.add(n);
@@ -124,21 +372,79 @@ export function stepTowardNearestSafeZone(state: GameState, from: number): numbe
   return null;
 }
 
-/** Find the nearest tile (BFS from `from`) containing a panicked villager. */
+/** Nearest panicked villager, BFS outward from `from`. */
 export function nearestPanickedVillager(state: GameState, from: number): VillagerToken | null {
-  const scenario = getScenario(state);
   const visited = new Set<number>([from]);
   const queue: number[] = [from];
   while (queue.length > 0) {
     const index = queue.shift()!;
-    const panicked = state.tiles[index].occupants.find((v) => v.status === "panic");
+    const panicked = state.tiles[index]?.occupants.find((v) => v.status === "panik");
     if (panicked) return panicked;
-    for (const n of adjacentIndices(index, scenario.cols, scenario.rows)) {
-      if (!visited.has(n) && state.tiles[n].typeId !== "ocean") {
-        visited.add(n);
-        queue.push(n);
-      }
+    for (const n of allNeighbors(state, index)) {
+      if (visited.has(n)) continue;
+      visited.add(n);
+      queue.push(n);
     }
   }
   return null;
+}
+
+/** Nearest passable tile a displaced player can scramble to. */
+export function nearestSafeStep(state: GameState, from: number): number | null {
+  for (const n of allNeighbors(state, from)) {
+    if (isPassable(state.tiles[n])) return n;
+  }
+  const anyPos = state.tiles.find((t) => t.isPosSiaga);
+  return anyPos ? anyPos.index : null;
+}
+
+// ——— Commit & Flip ————————————————————————————————————————————————————
+
+export function bothLocksOpened(state: GameState): boolean {
+  const news = state.activeNews;
+  if (!news) return false;
+  return news.locks.every((lock) => state.locksOpened.includes(lock));
+}
+
+/**
+ * THE TRUTH TABLE.
+ *
+ *  verdict === truth  &&  both locks opened  ->  terverifikasi
+ *  verdict === truth  &&  locks incomplete   ->  tebakan_beruntung
+ *  verdict !== truth  ||  abstain / none     ->  hoaks_menyebar
+ *
+ * `tebakan_beruntung` is the educational heart: guessing right is not literacy.
+ */
+export function resolveVerdict(state: GameState): VerdictOutcome {
+  const news = state.activeNews;
+  if (!news) return "hoaks_menyebar";
+  const verdict = state.verdict;
+  if (verdict === null || verdict === "abstain") return "hoaks_menyebar";
+  if (verdict !== news.truth) return "hoaks_menyebar";
+  return bothLocksOpened(state) ? "terverifikasi" : "tebakan_beruntung";
+}
+
+// ——— Win / lose ————————————————————————————————————————————————————————
+
+/**
+ * menang — evacuees >= target
+ * panik  — panic meter maxed (Gagal Literasi)
+ * korban — evacuees + villagers still alive < target (target now impossible)
+ * waktu  — disaster deck exhausted and target not met (end-of-round only)
+ */
+export function checkGameOver(
+  state: GameState,
+  opts: { endOfRound?: boolean } = {}
+): { over: boolean; reason?: GameOverReason } {
+  const target = targetEvacuation(state);
+  if (state.evacuees.length >= target) return { over: true, reason: "menang" };
+  if (state.panicMeter >= state.panicMeterMax) return { over: true, reason: "panik" };
+
+  const alive = villagersOnBoard(state).filter((v) => v.status !== "hilang").length;
+  if (state.evacuees.length + alive < target) return { over: true, reason: "korban" };
+
+  const timeIsUp = opts.endOfRound === true || state.phase === "p5_impact";
+  if (timeIsUp && state.decks.disaster.length === 0) return { over: true, reason: "waktu" };
+
+  return { over: false };
 }

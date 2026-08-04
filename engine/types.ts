@@ -1,123 +1,206 @@
-// Shared type contract for Ring of Fire Board Game — every chunk depends on this file.
+// ============================================================================
+// RING OF FIRE — Shared type contract v2.0
+// Canonical rules: E:\archives\ringoffire\docs\00-MASTER-SPEC-v2.md
+// Every chunk depends on this file. Do not change without updating the spec.
+// ============================================================================
 
-export type EvidenceCategory = "WHAT" | "WHERE" | "WHY" | "WHO" | "HOW";
+// ——— Board topology ————————————————————————————————————————————————
+// The board IS a ring. Tiles are a closed loop of `ringSize` indices.
+// Adjacency along the rim: (i-1+N)%N and (i+1)%N.
+// Sea Routes add 4 extra edges, each connecting two ADJACENT Pos Siaga
+// (arcs hugging the inner rim, never crossing the centre).
 
-export type EventStatus = "hoax" | "pseudoscience" | "scam" | "superstition" | "fact";
+export type SectorId = "merah" | "teal" | "kuning" | "biru";
 
-export interface EventCard {
-  id: string;
-  title: string;
-  body: string; // the forwarded message/news text
-  attachedContent: string; // description of the attached image/video
-  targetTileType: string; // tile type id affected (see data/tileTypes.ts)
-  status: EventStatus;
-  requiredLocks: EvidenceCategory[]; // OR — satisfying just one is enough
-  effectIfIgnored: string;
-  effectIfValidated?: string; // only for "fact" status
-  // Machine-readable effect flags (the strings above are player-facing copy)
-  ignored?: {
-    panicTargetTile?: boolean; // occupants of the target tile become panicked
-    apPenaltyFirstPlayer?: boolean; // the current first player loses 1 AP next phase
-    permanentPanic?: boolean; // target tile gains the permanentPanic flag
-  };
-  validated?: {
-    calmTargetTile?: boolean;
-    moveTargetTowardSafe?: boolean; // villagers on target tile step toward the nearest safe zone
-    calmTileType?: string; // calm occupants of every tile of this type
-  };
+export interface Sector {
+  id: SectorId;
+  name: string;          // "Busur Vulkanik"
+  region: string;        // "Jawa, Sumatra, Sunda Strait"
+  hoaxTheme: string;     // tema hoaks khas sektor ini
+  tileIndices: number[]; // 6 tiles per sector
 }
 
-export type ResourceKind = "ap2" | "alt_route" | "trade" | "calm_free" | "panic_shield";
+export interface TileType {
+  id: string;
+  name: string;
+  isPosSiaga?: boolean;
+}
+
+export interface Scenario {
+  id: string;
+  name: string;
+  ringSize: number;                  // 28
+  layout: string[];                  // tileType id per ring index
+  regionNames: string[];             // real-world label per tile
+  sectors: Sector[];
+  posSiagaIndices: number[];         // [0, 7, 14, 21]
+  seaRoutes: [number, number][];     // [[0,7],[7,14],[14,21],[21,0]]
+  villagerSetup: number[];           // villagers per ring index
+  totalVillagers: number;            // 16
+  targetEvacuation: number;          // 10
+  disasterDeckSize: number;          // 16
+}
+
+// ——— Cards ——————————————————————————————————————————————————————————
+
+export type EvidenceCategory = "WHAT" | "WHERE" | "WHEN" | "WHO" | "WHY" | "HOW";
+
+export type NewsCategory =
+  | "sosial_takhayul"
+  | "manipulasi_visual"
+  | "motif_penipuan"
+  | "pseudosains";
+
+/** The verdict the table can commit to. */
+export type Verdict = "hoax" | "fakta" | "abstain";
+
+/** The three possible resolutions of Commit & Flip. */
+export type VerdictOutcome = "terverifikasi" | "tebakan_beruntung" | "hoaks_menyebar";
+
+export interface NewsEffect {
+  panic?: number;                 // +N Meter Kepanikan
+  panicTargetSector?: boolean;    // villagers in target sector panic
+  calmTargetSector?: boolean;
+  lockEvacuationSector?: boolean; // no escort out of that sector next round
+  apPenaltyFirstPlayer?: number;
+  stepTowardPosSiaga?: boolean;   // villagers auto-step toward safety
+  removeCrisisToken?: boolean;
+  apBonus?: number;
+  drawEvidence?: number;
+}
+
+export interface NewsCard {
+  id: string;
+  category: NewsCategory;
+  title: string;
+  body: string;               // the post itself
+  attachedContent: string;    // description of the attached media
+  targetSectorId: SectorId;
+  /** FRONT of card ends here. Everything below is printed on the BACK. */
+  truth: "hoax" | "fakta";
+  locks: [EvidenceCategory, EvidenceCategory]; // exactly 2, both must open
+  explanation: string;        // 2-3 sentence scientific explanation
+  redFlags: string;           // "tanda bahaya yang seharusnya kalian lihat"
+  ifIgnored: NewsEffect;
+  ifValidated: NewsEffect;
+}
+
+export type ResourceKind =
+  | "ap2"
+  | "alt_route"
+  | "trade"
+  | "calm_free"
+  | "panic_shield";
 
 export interface EvidenceCard {
   id: string;
   category: EvidenceCategory;
   title: string;
-  points: number; // 1, 2, or 3 (wildcard)
+  points: 1 | 2 | 3;
   description: string;
-  milEffect: string; // effect when used for verification (top)
-  resourceEffectName: string; // name of the action when discarded for resources (bottom)
-  resourceEffect: string; // description of the resource effect
-  isWildcard?: boolean; // true only for the 3-point HOW card
+  milEffect: string;          // ZONA ATAS
+  resourceName: string;       // ZONA BAWAH label
+  resourceEffect: string;
   resourceKind: ResourceKind;
-  bonus?: "refund_ap" | "calm_nearest"; // 2-point card bonuses
+  isWildcard?: boolean;       // only the 3-point HOW card
+  bonus?: "refund_ap" | "calm_nearest";
 }
 
-export type DisasterCategory = "water_coastal" | "volcanic" | "tectonic" | "social_infra";
+export type DisasterCategory = "tektonik" | "vulkanik" | "oseanografi" | "atmosferik";
 
 export type RoundEffectKey =
-  | "coast_exit_penalty" // +1 AP to leave a Coastal tile
-  | "move_penalty" // +1 AP to move between tiles
-  | "peek_disaster" // favorable: team may peek the next disaster card
-  | "block_escort" // escort through/out of affected tile type blocked
-  | "panic_spread_fault" // fault zone + adjacent villagers panic at round start
-  | "block_where" // WHERE evidence cards can't verify this round
-  | "block_trade" // the trade resource action is blocked
-  | "calm_cost_up"; // calm costs 3 AP instead of 2
+  | "move_penalty"        // +1 AP all movement
+  | "coast_exit_penalty"  // +1 AP leaving affected sector
+  | "block_escort"        // no escort in/out of affected sector
+  | "block_where"         // WHERE evidence unusable
+  | "block_trade"         // barter unusable
+  | "calm_cost_up"        // calm costs 3
+  | "panic_spread"        // villagers in affected sector panic at round start
+  | "peek_disaster"       // favourable: peek next disaster
+  | "no_evidence_move";   // evidence cannot be discarded for movement
 
 export interface DisasterCard {
   id: string;
   category: DisasterCategory;
   title: string;
   description: string;
-  affectedTileType: string; // display name, or "All Locations"
-  roundEffect: string; // effect that applies during the next round
-  endEffect: string; // permanent impact at the end of the round
+  locationLabel: string;
+  roundEffect: string;                 // player-facing copy
   roundEffectKey: RoundEffectKey;
-  affectedTileTypeIds: string[]; // empty = all locations
-  destroysTile: boolean; // end effect flips one affected tile to Destroyed
+  affectedSectorIds: SectorId[];       // empty = all sectors
+  endEffect: string;                   // player-facing copy
+  /** Which tile takes damage at end of round. */
+  damageTarget: "affected_sector" | "most_villagers" | "none";
 }
 
-export type RoleAbilityType =
-  | "peek_disaster"
-  | "peek_event"
-  | "cancel_panic"
-  | "bonus_evidence"
-  | "bonus_ap";
+export type ChaosEffectKey =
+  | "calm_cost_up_perm"
+  | "hand_limit_down"
+  | "block_category"
+  | "ap_down"
+  | "villager_drift"
+  | "reputation_tax";
+
+export interface ChaosCard {
+  id: string;
+  title: string;
+  description: string;
+  effectKey: ChaosEffectKey;
+  blockedCategory?: EvidenceCategory;
+}
+
+export type RewardEffectKey =
+  | "ap_up"
+  | "hand_limit_up"
+  | "sea_route_cheap"
+  | "clear_chaos"
+  | "calm_cheap";
+
+export interface RewardCard {
+  id: string;
+  title: string;
+  cost: number;               // Poin Reputasi
+  description: string;
+  effectKey: RewardEffectKey;
+}
+
+// ——— Roles ————————————————————————————————————————————————————————
+
+export type ActiveAbilityKey =
+  | "recon"          // Elang: peek disaster OR news deck
+  | "data_mining"    // Orangutan: discard 2 evidence -> open any lock
+  | "tactical_escort"// Harimau: +1 AP for escort this turn
+  | "network_sync"   // Monyet: see a player's hand, swap 1 card
+  | "suppress";      // Komodo: calm up to 3 on your tile
+
+export type SubMissionKey =
+  | "map_damaged"      // Elang: end turn on 3 different damaged tiles
+  | "collect_3pt"      // Orangutan: hold three 3-point evidence at once
+  | "rescue_crisis"    // Harimau: evacuate 5 villagers taken from crisis tiles
+  | "catalyst"         // Monyet: 3 barters whose card solved the news same round
+  | "calm_six";        // Komodo: calm 6 panicked villagers total
 
 export interface Role {
   id: string;
-  name: string; // "Eagle"
-  nickname: string; // "The Scout"
-  ability: string;
-  abilityType: RoleAbilityType;
-  illustration?: string;
-}
-
-export interface TileType {
-  id: string;
   name: string;
-  isSafeZone?: boolean;
-  vulnerableTo: string[]; // disaster categories that can damage this tile type
+  title: string;              // "The Scout"
+  passiveName: string;
+  passive: string;
+  activeName: string;
+  active: string;
+  activeKey: ActiveAbilityKey;
+  subMissionName: string;
+  subMission: string;
+  subMissionKey: SubMissionKey;
+  subMissionTarget: number;
+  playstyle: string;          // one-line "gaya bermain"
 }
 
-export interface Scenario {
-  id: string;
-  name: string; // e.g. "The Pacific Ring of Fire"
-  tileCount: number;
-  cols: number;
-  rows: number;
-  layout: string[]; // tileType ids per grid position ("ocean" = impassable water)
-  regionNames: (string | null)[]; // real-world region label per tile (null for ocean)
-  villagerSetup: number[]; // villager count per grid position, length = tileCount
-  targetEvacuation: number;
-  totalVillagers: number;
-  disasterDeckSize: number;
-}
+// ——— Runtime state ————————————————————————————————————————————————
 
 export type PlayerId = string;
 
-export interface Player {
-  id: PlayerId;
-  name: string;
-  roleId: string;
-  ap: number;
-  hand: string[]; // evidence card ids (duplicates allowed — the deck has copies)
-  position: number; // tile index
-  altRouteReady: boolean; // "Alternate Route" discard effect armed
-}
-
-export type VillagerStatus = "normal" | "panic" | "evacuated" | "lost";
+export type VillagerStatus = "tenang" | "panik" | "selamat" | "hilang";
 
 export interface VillagerToken {
   id: string;
@@ -125,24 +208,45 @@ export interface VillagerToken {
   tileIndex: number;
 }
 
+/** 0 = Normal, 1 = Retak, 2 = Hancur. */
+export type TileDamage = 0 | 1 | 2;
+
 export interface TileState {
   index: number;
   typeId: string;
-  status: "normal" | "destroyed";
+  sectorId: SectorId | null;   // null for Pos Siaga
+  isPosSiaga: boolean;
+  damage: TileDamage;
   occupants: VillagerToken[];
   hasCrisisToken: boolean;
-  permanentPanic: boolean;
+  evacuationLocked: boolean;   // from a news "lock evacuation" effect
+}
+
+export interface Player {
+  id: PlayerId;
+  name: string;
+  roleId: string;
+  ap: number;
+  hand: string[];              // evidence card ids
+  position: number;            // ring index
+  activeUsedThisRound: boolean;
+  altRouteReady: boolean;
+  escortBonusAp: number;       // Harimau tactical escort
+  subMissionProgress: number;
+  subMissionDone: boolean;
+  damagedTilesVisited: number[]; // Elang sub-mission tracking
 }
 
 export type GamePhase =
   | "setup"
-  | "phase1_influx"
-  | "phase2_verification"
-  | "phase3_evacuation"
-  | "phase4_escalation"
+  | "p1_disaster"
+  | "p2_news"
+  | "p3_turns"
+  | "p4_verdict"
+  | "p5_impact"
   | "game_over";
 
-export type GameOverReason = "panic" | "casualties" | "timeout" | "win";
+export type GameOverReason = "menang" | "panik" | "korban" | "waktu";
 
 export interface GameLogEntry {
   round: number;
@@ -151,81 +255,113 @@ export interface GameLogEntry {
   timestamp: number;
 }
 
-export type EventOutcome = "pending" | "debunked" | "validated" | "ignored";
-
 export interface GameStats {
-  hoaxesDebunked: number;
+  terverifikasi: number;
+  tebakanBeruntung: number;
+  hoaksMenyebar: number;
+  hoaxDebunked: number;
   factsValidated: number;
-  eventsIgnored: number;
+  subMissionsDone: number;
 }
 
 export interface PeekInfo {
-  kind: "event" | "disaster";
-  cardId: string;
+  kind: "disaster" | "news" | "hand";
+  cardId?: string;
+  playerId?: PlayerId;
 }
 
 export interface GameState {
   phase: GamePhase;
   round: number;
   scenarioId: string;
+  difficulty: "siaga" | "awas" | "darurat";
+
   players: Player[];
   currentPlayerIndex: number;
   firstPlayerIndex: number;
+  playersEndedTurn: PlayerId[];
+
   tiles: TileState[];
+
   panicMeter: number;
   panicMeterMax: number;
-  activeEventCard: EventCard | null;
-  activeEventTileIndex: number | null;
-  activeEventLocksOpened: EvidenceCategory[];
-  activeEventOutcome: EventOutcome;
-  eventDeck: string[]; // remaining ids, shuffled
-  eventDiscard: string[];
-  evidenceDeck: string[];
-  evidenceDiscard: string[];
-  disasterDeck: string[]; // remaining ids — empty = timeout loss
-  activeDisasterEffect: DisasterCard | null; // round effect currently in force
-  incomingDisaster: DisasterCard | null; // drawn in Phase 4, becomes active next round
+  reputation: number;
+
+  // Active round cards
+  activeDisaster: DisasterCard | null;
+  activeNews: NewsCard | null;
+  newsTileIndex: number | null;
+
+  // Commit & Flip
+  locksOpened: EvidenceCategory[];
+  verdict: Verdict | null;      // committed, immutable once set
+  newsRevealed: boolean;        // card has been flipped
+  lastOutcome: VerdictOutcome | null;
+
+  decks: {
+    disaster: string[];
+    news: string[];
+    evidence: string[];
+    chaos: string[];
+  };
+  discards: {
+    disaster: string[];
+    news: string[];
+    evidence: string[];
+  };
+
+  activeChaos: string[];        // chaos card ids in force
+  ownedRewards: string[];       // reward card ids purchased
+
   evacuees: VillagerToken[];
   casualties: VillagerToken[];
+
   gameOverReason: GameOverReason | null;
   log: GameLogEntry[];
   stats: GameStats;
+
   // per-round bookkeeping
   pendingApBonus: Record<PlayerId, number>;
-  monkeyPenalty: Record<PlayerId, boolean>;
   panicShield: boolean;
-  abilityUsed: Record<PlayerId, boolean>;
-  tigerEscortBonus: Record<PlayerId, boolean>;
-  playersEndedTurn: PlayerId[];
   peek: PeekInfo | null;
+  seaRouteOpen: boolean;
   rngSeed: number;
 }
 
 export type GameAction =
-  | { type: "START_GAME"; scenarioId: string; players: { name: string; roleId: string }[]; seed?: number }
-  | { type: "DRAW_EVENT_CARD" }
-  | { type: "USE_EVIDENCE_FOR_VERIFICATION"; playerId: PlayerId; evidenceId: string }
   | {
-      type: "DISCARD_EVIDENCE_FOR_RESOURCE";
-      playerId: PlayerId;
-      evidenceId: string;
-      tradeWithPlayerId?: PlayerId;
-      tradeGiveCardId?: string;
-      targetVillagerId?: string;
+      type: "START_GAME";
+      scenarioId: string;
+      difficulty: "siaga" | "awas" | "darurat";
+      players: { name: string; roleId: string }[];
+      seed?: number;
     }
-  | { type: "RESOLVE_VERIFICATION" } // resolves as ignored if no lock has been opened
-  | { type: "MOVE_PLAYER"; playerId: PlayerId; targetTileIndex: number }
+  // Fase 1
+  | { type: "DRAW_DISASTER" }
+  // Fase 2
+  | { type: "DRAW_NEWS" }
+  // Fase 3
+  | { type: "MOVE_PLAYER"; playerId: PlayerId; targetTileIndex: number; viaSeaRoute?: boolean }
   | { type: "CALM_VILLAGER"; playerId: PlayerId; villagerId: string }
-  | { type: "ESCORT_VILLAGER"; playerId: PlayerId; villagerId: string; targetTileIndex: number }
+  | { type: "ESCORT_VILLAGER"; playerId: PlayerId; villagerIds: string[]; targetTileIndex: number; viaSeaRoute?: boolean }
+  | { type: "INVESTIGATE"; playerId: PlayerId }
+  | { type: "PLAY_EVIDENCE_LOCK"; playerId: PlayerId; evidenceId: string; lock: EvidenceCategory }
+  | { type: "DISCARD_FOR_RESOURCE"; playerId: PlayerId; evidenceId: string; tradeWithPlayerId?: PlayerId; tradeGiveCardId?: string; targetVillagerId?: string }
+  | { type: "BARTER"; playerId: PlayerId; withPlayerId: PlayerId; giveCardId: string; takeCardId: string }
+  | { type: "USE_ACTIVE_ABILITY"; playerId: PlayerId; targetPlayerId?: PlayerId; deck?: "disaster" | "news"; evidenceIds?: string[]; lock?: EvidenceCategory }
   | { type: "END_PLAYER_TURN" }
-  | { type: "DRAW_DISASTER_CARD" }
+  // Fase 4 — Commit & Flip
+  | { type: "COMMIT_VERDICT"; verdict: Verdict }
+  | { type: "FLIP_NEWS" }
+  // Fase 5
+  | { type: "BUY_REWARD"; rewardId: string }
   | { type: "ADVANCE_PHASE" }
-  | { type: "USE_ROLE_ABILITY"; playerId: PlayerId }
   | { type: "CLEAR_PEEK" }
   | { type: "RESET_GAME" }
-  // Debug / playtest actions (hidden panel)
+  // Debug / playtest
   | { type: "DEBUG_SET_PANIC"; value: number }
+  | { type: "DEBUG_SET_REPUTATION"; value: number }
   | { type: "DEBUG_SET_PHASE"; phase: GamePhase }
-  | { type: "DEBUG_SET_EVENT_TOP"; cardId: string }
+  | { type: "DEBUG_SET_NEWS_TOP"; cardId: string }
   | { type: "DEBUG_SET_DISASTER_TOP"; cardId: string }
-  | { type: "DEBUG_EMPTY_DISASTER_DECK" };
+  | { type: "DEBUG_TRIM_DISASTER_DECK" };

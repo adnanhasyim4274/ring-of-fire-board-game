@@ -1,10 +1,10 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { PartyPopper, Skull } from "lucide-react";
+import { GraduationCap, PartyPopper, Skull } from "lucide-react";
 import type { GameAction, GameState } from "@/engine/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { en } from "@/lib/i18n/en";
+import { id } from "@/lib/i18n/id";
 
 export function GameOverModal({
   state,
@@ -15,15 +15,21 @@ export function GameOverModal({
 }) {
   const router = useRouter();
   if (state.phase !== "game_over" || !state.gameOverReason) return null;
-  const won = state.gameOverReason === "win";
-  const stats = [
-    [en.gameOver.stats.rounds, state.round],
-    [en.gameOver.stats.evacuated, state.evacuees.length],
-    [en.gameOver.stats.lost, state.casualties.length],
-    [en.gameOver.stats.hoaxes, state.stats.hoaxesDebunked],
-    [en.gameOver.stats.facts, state.stats.factsValidated],
-    [en.gameOver.stats.ignored, state.stats.eventsIgnored],
-  ] as const;
+
+  const won = state.gameOverReason === "menang";
+  const stats: [string, number][] = [
+    [id.gameOver.stats.rounds, state.round],
+    [id.gameOver.stats.evacuated, state.evacuees.length],
+    [id.gameOver.stats.lost, state.casualties.length],
+    [id.gameOver.stats.reputation, state.reputation],
+    [id.gameOver.stats.terverifikasi, state.stats.terverifikasi],
+    [id.gameOver.stats.tebakanBeruntung, state.stats.tebakanBeruntung],
+    [id.gameOver.stats.hoaksMenyebar, state.stats.hoaksMenyebar],
+    [id.gameOver.stats.hoaxDebunked, state.stats.hoaxDebunked],
+    [id.gameOver.stats.factsValidated, state.stats.factsValidated],
+    [id.gameOver.stats.subMissions, state.stats.subMissionsDone],
+  ];
+
   return (
     <Modal open dismissable={false}>
       <div className="space-y-4 text-center">
@@ -32,21 +38,34 @@ export function GameOverModal({
         ) : (
           <Skull className="mx-auto h-14 w-14 text-zinc-500" />
         )}
-        <h2 className="text-2xl font-black">{won ? en.gameOver.winTitle : en.gameOver.loseTitle}</h2>
-        <p className="text-sm text-zinc-600">{en.gameOver.reasons[state.gameOverReason]}</p>
+        <h2 className="text-2xl font-black">
+          {won ? id.gameOver.winTitle : id.gameOver.loseTitle}
+        </h2>
+        <p className="text-sm leading-snug text-zinc-600">
+          {id.gameOver.reasons[state.gameOverReason]}
+        </p>
+
         <section className="rounded-xl bg-zinc-100 p-3 text-left">
-          <h3 className="mb-2 text-center text-xs font-black uppercase text-zinc-500">
-            {en.gameOver.stats.title}
+          <h3 className="mb-2 text-center text-[10px] font-black uppercase tracking-wide text-zinc-500">
+            {id.gameOver.stats.title}
           </h3>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+          <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
             {stats.map(([label, value]) => (
-              <div key={label} className="flex justify-between">
-                <dt className="text-zinc-600">{label}</dt>
+              <div key={label} className="flex justify-between gap-2">
+                <dt className="truncate text-zinc-600">{label}</dt>
                 <dd className="font-black tabular-nums">{value}</dd>
               </div>
             ))}
           </dl>
         </section>
+
+        {state.stats.tebakanBeruntung > 0 && (
+          <p className="flex items-start gap-2 rounded-xl border-2 border-amber-400 bg-amber-50 p-2.5 text-left text-xs font-bold leading-snug text-amber-900">
+            <GraduationCap className="mt-0.5 h-4 w-4 shrink-0" />
+            {id.gameOver.literacyNote}
+          </p>
+        )}
+
         <div className="flex flex-col gap-2">
           <Button
             onClick={() => {
@@ -54,7 +73,7 @@ export function GameOverModal({
               router.push("/setup");
             }}
           >
-            {en.gameOver.playAgain}
+            {id.gameOver.playAgain}
           </Button>
           <Button
             variant="secondary"
@@ -63,7 +82,7 @@ export function GameOverModal({
               router.push("/");
             }}
           >
-            {en.gameOver.backHome}
+            {id.gameOver.backHome}
           </Button>
         </div>
       </div>

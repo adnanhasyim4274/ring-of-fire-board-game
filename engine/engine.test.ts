@@ -1,278 +1,871 @@
+// ============================================================================
+// RING OF FIRE v2 — engine tests.
+// Board features are located dynamically (search for a Pos Siaga, a tile with
+// villagers) so these survive data tweaks.
+// ============================================================================
 import { describe, expect, it } from "vitest";
 import { reduce } from "./reducer";
-import { adjacentIndices, checkGameOver, isPassable, moveCost } from "./rules";
-import type { GameAction, GameState } from "./types";
-import { disasterCardById } from "@/data/disasterCards";
+import {
+  checkGameOver,
+  isSeaRouteOpen,
+  moveCost,
+  resolveVerdict,
+  rimNeighbors,
+  seaRouteNeighbors,
+} from "./rules";
+import type {
+  EvidenceCategory,
+  GameAction,
+  GameState,
+  TileState,
+  Verdict,
+  VillagerToken,
+} from "./types";
+import { evidenceCards, wildcardEvidenceId } from "@/data/evidenceCards";
+import { newsCardById } from "@/data/newsCards";
 import { scenarioById } from "@/data/scenarios";
 
-const SEED = 42;
+// ——— Harness ————————————————————————————————————————————————————————
 
-function newGame(roleIds: string[] = ["eagle", "tiger", "monkey"]): GameState {
-  const action: GameAction = {
+const SCENARIO_ID = Object.keys(scenarioById)[0];
+
+/** A disaster with no movement penalty, no escort block and no tile damage. */
+const CALM_DISASTER = "dis_vul_04";
+/** Sector teal, truth "fakta" — keeps sector merah untouched during tests. */
+const TEAL_NEWS = "news_ps_01";
+
+function act(state: GameState, action: GameAction): GameState {
+  const next = reduce(state, action);
+  expect(next).not.toBeNull();
+  return next!;
+}
+
+function newGame(
+  opts: {
+    roles?: string[];
+    difficulty?: GameState["difficulty"];
+    seed?: number;
+  } = {}
+): GameState {
+  const roles = opts.roles ?? ["elang", "komodo"];
+  const state = reduce(null, {
     type: "START_GAME",
-    scenarioId: "ring_of_fire",
-    players: roleIds.map((roleId, i) => ({ name: `P${i + 1}`, roleId })),
-    seed: SEED,
-  };
-  return reduce(null, action)!;
+    scenarioId: SCENARIO_ID,
+    difficulty: opts.difficulty ?? "awas",
+    players: roles.map((roleId, i) => ({ name: `P${i + 1}`, roleId })),
+    seed: opts.seed ?? 7,
+  });
+  expect(state).not.toBeNull();
+  return state!;
 }
 
-function dispatch(state: GameState, ...actions: GameAction[]): GameState {
-  let s: GameState | null = state;
-  for (const a of actions) s = reduce(s, a);
-  return s!;
+/** Fase 1 + Fase 2, stopping at the start of Fase 3. */
+function toTurnsPhase(
+  state: GameState,
+  opts: { disasterId?: string; newsId?: string } = {}
+): GameState {
+  let s = state;
+  s = act(s, { type: "DEBUG_SET_DISASTER_TOP", cardId: opts.disasterId ?? CALM_DISASTER });
+  s = act(s, { type: "DRAW_DISASTER" });
+  s = act(s, { type: "ADVANCE_PHASE" });
+  s = act(s, { type: "DEBUG_SET_NEWS_TOP", cardId: opts.newsId ?? TEAL_NEWS });
+  s = act(s, { type: "DRAW_NEWS" });
+  s = act(s, { type: "ADVANCE_PHASE" });
+  expect(s.phase).toBe("p3_turns");
+  return s;
 }
 
-/** A passable neighbor of a tile, whatever the scenario geometry. */
-function passableNeighbor(s: GameState, index: number): number {
-  const scenario = scenarioById[s.scenarioId];
-  const n = adjacentIndices(index, scenario.cols, scenario.rows).find((i) => isPassable(s.tiles[i]));
-  if (n === undefined) throw new Error(`no passable neighbor of tile ${index}`);
-  return n;
+function endAllTurns(state: GameState): GameState {
+  let s = state;
+  for (let i = 0; i < s.players.length; i++) s = act(s, { type: "END_PLAYER_TURN" });
+  return s;
 }
 
-/** A safe-zone tile together with a passable neighbor to escort in from. */
-function safeZoneWithNeighbor(s: GameState): { safe: number; neighbor: number } {
-  const scenario = scenarioById[s.scenarioId];
-  for (let i = 0; i < s.tiles.length; i++) {
-    if (s.tiles[i].typeId !== "safe_zone") continue;
-    const neighbor = adjacentIndices(i, scenario.cols, scenario.rows).find((j) => isPassable(s.tiles[j]));
-    if (neighbor !== undefined) return { safe: i, neighbor };
+/** Fase 1 → Fase 5, stopping inside p5_impact (before the round rolls over). */
+function playRound(
+  state: GameState,
+  opts: { disasterId?: string; newsId?: string; verdict?: Verdict } = {}
+): GameState {
+  let s = toTurnsPhase(state, opts);
+  s = endAllTurns(s);
+  if (opts.verdict && s.phase === "p4_verdict") {
+    s = act(s, { type: "COMMIT_VERDICT", verdict: opts.verdict });
+    s = act(s, { type: "FLIP_NEWS" });
   }
-  throw new Error("no safe zone with a passable neighbor");
+  s = act(s, { type: "ADVANCE_PHASE" });
+  return s;
 }
 
-describe("setup", () => {
-  it("starts a game with villagers, hands, and decks", () => {
+function evidenceIdFor(category: EvidenceCategory): string {
+  const card =
+    evidenceCards.find((c) => c.category === category && !c.isWildcard) ??
+    evidenceCards.find((c) => c.category === category);
+  if (!card) throw new Error(`no evidence card for ${category}`);
+  return card.id;
+}
+
+/** Play a matching Evidence card onto `lock`, seeding the hand first. */
+function openLock(state: GameState, lock: EvidenceCategory, evidenceId?: string): GameState {
+  const id = evidenceId ?? evidenceIdFor(lock);
+  const s = structuredClone(state);
+  s.players[0].hand.push(id);
+  return act(s, { type: "PLAY_EVIDENCE_LOCK", playerId: s.players[0].id, evidenceId: id, lock });
+}
+
+function posSiagaIndex(state: GameState): number {
+  const i = state.tiles.findIndex((t) => t.isPosSiaga);
+  expect(i).toBeGreaterThanOrEqual(0);
+  return i;
+}
+
+/** A tile that holds villagers and sits on the rim next to a Pos Siaga. */
+function tileNextToPosSiaga(state: GameState): TileState {
+  const pos = posSiagaIndex(state);
+  const neighbour = rimNeighbors(pos, state.tiles.length)
+    .map((i) => state.tiles[i])
+    .find((t) => !t.isPosSiaga && t.occupants.length > 0);
+  expect(neighbour).toBeTruthy();
+  return neighbour!;
+}
+
+function villagerCountOnBoard(state: GameState): number {
+  return state.tiles.reduce((n, t) => n + t.occupants.length, 0);
+}
+
+// ——— Setup ——————————————————————————————————————————————————————————
+
+describe("START_GAME", () => {
+  it("builds the 28-tile ring with 4 Pos Siaga and 16 villagers", () => {
     const s = newGame();
-    expect(s.phase).toBe("phase1_influx");
-    expect(s.tiles.flatMap((t) => t.occupants)).toHaveLength(15);
-    expect(s.players).toHaveLength(3);
-    for (const p of s.players) expect(p.hand).toHaveLength(4);
-    expect(s.disasterDeck).toHaveLength(16);
-    expect(s.evidenceDeck).toHaveLength(50 - 3 * 4);
-  });
-});
-
-describe("phase 1 — incoming crisis", () => {
-  it("places a crisis token and panics the target tile", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DEBUG_SET_EVENT_TOP", cardId: "evt_01" }, { type: "DRAW_EVENT_CARD" });
-    expect(s.activeEventCard?.id).toBe("evt_01");
-    const tile = s.tiles[s.activeEventTileIndex!];
-    expect(tile.typeId).toBe("coast");
-    expect(tile.hasCrisisToken).toBe(true);
-    expect(tile.occupants.every((v) => v.status === "panic")).toBe(true);
+    const scenario = scenarioById[SCENARIO_ID];
+    expect(s.tiles).toHaveLength(scenario.ringSize);
+    expect(s.tiles.filter((t) => t.isPosSiaga)).toHaveLength(scenario.posSiagaIndices.length);
+    expect(villagerCountOnBoard(s)).toBe(scenario.totalVillagers);
+    expect(s.phase).toBe("p1_disaster");
+    expect(s.round).toBe(1);
   });
 
-  it("monkey draws an extra evidence card each round", () => {
-    let s = newGame(["monkey", "eagle"]);
-    s = dispatch(s, { type: "DRAW_EVENT_CARD" });
-    expect(s.players[0].hand).toHaveLength(4 + 1 + 1); // base draw + monkey bonus
-    expect(s.players[1].hand).toHaveLength(4 + 1);
-  });
-});
-
-describe("phase 2 — verification with the HOW wildcard", () => {
-  it("the wildcard resolves an event whose locks are WHAT/WHERE", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DEBUG_SET_EVENT_TOP", cardId: "evt_01" }, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    s.players[0].hand.push("evd_how_01"); // give P1 the wildcard
-    s = dispatch(s, { type: "USE_EVIDENCE_FOR_VERIFICATION", playerId: "p1", evidenceId: "evd_how_01" });
-    expect(s.activeEventOutcome).toBe("debunked");
-    expect(s.stats.hoaxesDebunked).toBe(1);
-    expect(s.panicMeter).toBe(0);
-    const tile = s.tiles.find((t) => t.typeId === "coast")!;
-    expect(tile.hasCrisisToken).toBe(false);
-    expect(tile.occupants.every((v) => v.status === "normal")).toBe(true);
-  });
-
-  it("a non-matching category is rejected", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DEBUG_SET_EVENT_TOP", cardId: "evt_04" }, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    s.players[0].hand.push("evd_what_01"); // evt_04 only accepts HOW
-    s = dispatch(s, { type: "USE_EVIDENCE_FOR_VERIFICATION", playerId: "p1", evidenceId: "evd_what_01" });
-    expect(s.activeEventOutcome).toBe("pending");
-    expect(s.players[0].hand).toContain("evd_what_01"); // not consumed
-  });
-
-  it("ignoring an event raises the panic meter and flags the monkey", () => {
-    let s = newGame(["monkey", "eagle"]);
-    s = dispatch(s, { type: "DEBUG_SET_EVENT_TOP", cardId: "evt_01" }, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    s = dispatch(s, { type: "RESOLVE_VERIFICATION" });
-    expect(s.activeEventOutcome).toBe("ignored");
-    expect(s.panicMeter).toBe(1);
-    expect(s.monkeyPenalty["p1"]).toBe(true);
-    // Monkey pays the penalty at the phase-3 AP reset
-    s = dispatch(s, { type: "ADVANCE_PHASE" });
-    expect(s.players[0].ap).toBe(2);
-    expect(s.players[1].ap).toBe(3);
-  });
-
-  it("validating a fact applies its bonus effect", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DEBUG_SET_EVENT_TOP", cardId: "evt_05" }, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    const coastIndex = s.activeEventTileIndex!;
-    const beforeCount = s.tiles[coastIndex].occupants.length;
-    expect(beforeCount).toBeGreaterThan(0);
-    s.players[0].hand.push("evd_how_02");
-    s = dispatch(s, { type: "USE_EVIDENCE_FOR_VERIFICATION", playerId: "p1", evidenceId: "evd_how_02" });
-    expect(s.activeEventOutcome).toBe("validated");
-    expect(s.stats.factsValidated).toBe(1);
-    expect(s.tiles[coastIndex].occupants).toHaveLength(0); // moved a step inland
-  });
-});
-
-describe("phase 3 — evacuation & disaster round effects", () => {
-  function toPhase3(s: GameState): GameState {
-    return dispatch(s, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" }, { type: "RESOLVE_VERIFICATION" }, { type: "ADVANCE_PHASE" });
-  }
-
-  it("Volcanic Ashfall makes movement cost +1 AP", () => {
-    let s = toPhase3(newGame());
-    s.activeDisasterEffect = disasterCardById["dis_02"];
-    const player = s.players[s.currentPlayerIndex];
-    const from = s.tiles[player.position];
-    expect(moveCost(s, from)).toBe(2);
-    const target = passableNeighbor(s, player.position);
-    const apBefore = player.ap;
-    s = dispatch(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: target });
-    expect(s.players[s.currentPlayerIndex].ap).toBe(apBefore - 2);
-  });
-
-  it("escorting a calm villager into the safe zone evacuates them", () => {
-    let s = toPhase3(newGame());
-    const player = s.players[s.currentPlayerIndex];
-    // Put a calm villager on a tile next to a safe zone, with the player there too.
-    const { safe, neighbor } = safeZoneWithNeighbor(s);
-    const v = s.tiles.flatMap((t) => t.occupants).find((x) => x.status === "normal")!;
-    s.tiles[v.tileIndex].occupants = s.tiles[v.tileIndex].occupants.filter((x) => x.id !== v.id);
-    v.tileIndex = neighbor;
-    s.tiles[neighbor].occupants.push(v);
-    player.position = neighbor;
-    s = dispatch(s, { type: "ESCORT_VILLAGER", playerId: player.id, villagerId: v.id, targetTileIndex: safe });
-    expect(s.evacuees).toHaveLength(1);
-    expect(s.evacuees[0].status).toBe("evacuated");
-  });
-
-  it("tiger's first escort each round is discounted", () => {
-    let s = toPhase3(newGame(["tiger", "eagle"]));
-    const tiger = s.players.find((p) => p.roleId === "tiger")!;
-    s.currentPlayerIndex = s.players.indexOf(tiger);
-    const { safe, neighbor } = safeZoneWithNeighbor(s);
-    const v = s.tiles.flatMap((t) => t.occupants).find((x) => x.status === "normal")!;
-    s.tiles[v.tileIndex].occupants = s.tiles[v.tileIndex].occupants.filter((x) => x.id !== v.id);
-    v.tileIndex = neighbor;
-    s.tiles[neighbor].occupants.push(v);
-    tiger.position = neighbor;
-    const apBefore = tiger.ap;
-    s = dispatch(s, { type: "ESCORT_VILLAGER", playerId: tiger.id, villagerId: v.id, targetTileIndex: safe });
-    expect(s.players.find((p) => p.roleId === "tiger")!.ap).toBe(apBefore); // free
-    expect(s.tigerEscortBonus[tiger.id]).toBe(false);
-  });
-});
-
-describe("phase 4 — escalation", () => {
-  it("tsunami destroys a coastal tile and claims villagers left there", () => {
-    let s = newGame();
-    s = dispatch(
-      s,
-      { type: "DRAW_EVENT_CARD" },
-      { type: "ADVANCE_PHASE" },
-      { type: "RESOLVE_VERIFICATION" },
-      { type: "ADVANCE_PHASE" },
-      { type: "ADVANCE_PHASE" },
-      { type: "DEBUG_SET_DISASTER_TOP", cardId: "dis_01" },
-      { type: "DRAW_DISASTER_CARD" }
-    );
-    const destroyed = s.tiles.find((t) => t.status === "destroyed")!;
-    expect(destroyed.typeId).toBe("coast");
-    expect(s.casualties.length).toBeGreaterThan(0);
-    expect(s.casualties.every((v) => v.status === "lost")).toBe(true);
-  });
-});
-
-describe("checkGameOver — win + all three lose conditions", () => {
-  it("win: evacuation target reached", () => {
+  it("gives every tile a sectorId except the Pos Siaga tiles", () => {
     const s = newGame();
-    const scenario = scenarioById[s.scenarioId];
-    for (let i = 0; i < scenario.targetEvacuation; i++) {
-      s.evacuees.push({ id: `w${i}`, status: "evacuated", tileIndex: 8 });
-    }
-    expect(checkGameOver(s)).toEqual({ over: true, reason: "win" });
-  });
-
-  it("panic: meter at max = MIL fail", () => {
-    const s = newGame();
-    s.panicMeter = s.panicMeterMax;
-    expect(checkGameOver(s)).toEqual({ over: true, reason: "panic" });
-  });
-
-  it("casualties: not enough villagers left to reach the target", () => {
-    const s = newGame();
-    // Lose 8 of 15 villagers → only 7 remain < target 8.
-    let lost = 0;
     for (const tile of s.tiles) {
-      while (tile.occupants.length > 0 && lost < 8) {
-        const v = tile.occupants.pop()!;
-        v.status = "lost";
-        s.casualties.push(v);
-        lost++;
-      }
+      if (tile.isPosSiaga) expect(tile.sectorId).toBeNull();
+      else expect(tile.sectorId).not.toBeNull();
     }
-    expect(checkGameOver(s)).toEqual({ over: true, reason: "casualties" });
   });
 
-  it("timeout: last disaster card drawn without meeting the target", () => {
-    let s = newGame();
-    s = dispatch(
-      s,
-      { type: "DRAW_EVENT_CARD" },
-      { type: "ADVANCE_PHASE" },
-      { type: "RESOLVE_VERIFICATION" },
-      { type: "ADVANCE_PHASE" },
-      { type: "ADVANCE_PHASE" },
-      { type: "DEBUG_SET_DISASTER_TOP", cardId: "dis_08" }, // non-destructive card
-      { type: "DEBUG_EMPTY_DISASTER_DECK" },
-      { type: "DRAW_DISASTER_CARD" }
-    );
-    expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("timeout");
+  it("deals a starting hand and places players on Pos Siaga tiles", () => {
+    const s = newGame({ roles: ["elang", "harimau", "komodo"] });
+    for (const p of s.players) {
+      expect(p.hand.length).toBeGreaterThan(0);
+      expect(s.tiles[p.position].isPosSiaga).toBe(true);
+    }
   });
 
-  it("panic loss triggers immediately when an ignored event maxes the meter", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DEBUG_SET_PANIC", value: 4 }, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" }, { type: "RESOLVE_VERIFICATION" });
-    expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("panic");
+  it("applies the difficulty preset", () => {
+    expect(newGame({ difficulty: "siaga" }).panicMeterMax).toBe(10);
+    expect(newGame({ difficulty: "awas" }).panicMeterMax).toBe(8);
+    expect(newGame({ difficulty: "darurat" }).panicMeterMax).toBe(6);
+    expect(newGame({ difficulty: "siaga" }).decks.disaster).toHaveLength(18);
+    expect(newGame({ difficulty: "darurat" }).decks.disaster).toHaveLength(14);
   });
 });
 
-describe("evidence resource effects", () => {
-  it("Mental Fortitude prevents the panic rise this round", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    s.players[0].hand.push("evd_how_01");
-    s = dispatch(
-      s,
-      { type: "DISCARD_EVIDENCE_FOR_RESOURCE", playerId: "p1", evidenceId: "evd_how_01" },
-      { type: "RESOLVE_VERIFICATION" }
-    );
-    expect(s.panicShield).toBe(true);
-    expect(s.panicMeter).toBe(0);
-    expect(s.activeEventOutcome).toBe("ignored");
+// ——— Ring topology ————————————————————————————————————————————————
+
+describe("ring adjacency", () => {
+  it("wraps around the closed loop", () => {
+    const s = newGame();
+    const n = s.tiles.length;
+    expect(rimNeighbors(n - 1, n).sort()).toEqual([0, n - 2].sort());
+    expect(rimNeighbors(0, n).sort()).toEqual([1, n - 1].sort());
+    expect(rimNeighbors(5, n).sort()).toEqual([4, 6]);
   });
 
-  it("Emergency Sprint before phase 3 becomes a pending AP bonus", () => {
-    let s = newGame();
-    s = dispatch(s, { type: "DRAW_EVENT_CARD" }, { type: "ADVANCE_PHASE" });
-    s.players[0].hand.push("evd_what_01");
-    s = dispatch(
-      s,
-      { type: "DISCARD_EVIDENCE_FOR_RESOURCE", playerId: "p1", evidenceId: "evd_what_01" },
-      { type: "RESOLVE_VERIFICATION" },
-      { type: "ADVANCE_PHASE" }
+  it("refuses a move between two non-adjacent rim tiles", () => {
+    const s = toTurnsPhase(newGame());
+    const p = s.players[0];
+    const far = (p.position + 5) % s.tiles.length;
+    const after = act(s, { type: "MOVE_PLAYER", playerId: p.id, targetTileIndex: far });
+    expect(after.players[0].position).toBe(p.position);
+  });
+});
+
+describe("sea routes", () => {
+  it("links two adjacent Pos Siaga in a single move", () => {
+    const s = toTurnsPhase(newGame());
+    const scenario = scenarioById[SCENARIO_ID];
+    const from = s.players[0].position;
+    const [to] = seaRouteNeighbors(from, scenario);
+    expect(to).toBeDefined();
+    // Not reachable along the rim — that is the whole point of the shortcut.
+    expect(rimNeighbors(from, s.tiles.length)).not.toContain(to);
+
+    const cost = moveCost(s, from, to, s.players[0], true);
+    const apBefore = s.players[0].ap;
+    const after = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: s.players[0].id,
+      targetTileIndex: to,
+      viaSeaRoute: true,
+    });
+    expect(after.players[0].position).toBe(to);
+    expect(after.players[0].ap).toBe(apBefore - cost);
+    expect(cost).toBe(2);
+  });
+
+  it("closes completely under an oseanografi disaster", () => {
+    const s = toTurnsPhase(newGame(), { disasterId: "dis_ose_01" });
+    expect(s.activeDisaster?.category).toBe("oseanografi");
+    expect(isSeaRouteOpen(s)).toBe(false);
+
+    const from = s.players[0].position;
+    const [to] = seaRouteNeighbors(from, scenarioById[SCENARIO_ID]);
+    const after = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: s.players[0].id,
+      targetTileIndex: to,
+      viaSeaRoute: true,
+    });
+    expect(after.players[0].position).toBe(from);
+  });
+});
+
+// ——— Commit & Flip ————————————————————————————————————————————————
+
+/** Drive to Fase 4 with a chosen news card, optionally opening its locks. */
+function toVerdictPhase(newsId: string, locksToOpen: "both" | "one" | "none"): GameState {
+  let s = toTurnsPhase(newGame(), { newsId });
+  const news = newsCardById[newsId];
+  const locks =
+    locksToOpen === "both" ? news.locks : locksToOpen === "one" ? [news.locks[0]] : [];
+  for (const lock of locks) s = openLock(s, lock);
+  s = endAllTurns(s);
+  expect(s.phase).toBe("p4_verdict");
+  return s;
+}
+
+describe("Commit & Flip — the three outcomes", () => {
+  const HOAX_NEWS = "news_st_01"; // truth: hoax, locks HOW + WHEN
+
+  it("terverifikasi: right verdict AND both locks -> +1 reputation, crisis cleared", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "both");
+    expect(s.locksOpened).toHaveLength(2);
+    const reputationBefore = s.reputation;
+
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
+    s = act(s, { type: "FLIP_NEWS" });
+
+    expect(s.newsRevealed).toBe(true);
+    expect(s.lastOutcome).toBe("terverifikasi");
+    expect(s.reputation).toBe(reputationBefore + 1);
+    expect(s.stats.terverifikasi).toBe(1);
+    expect(s.stats.hoaxDebunked).toBe(1);
+    expect(s.tiles[s.newsTileIndex!].hasCrisisToken).toBe(false);
+    expect(s.activeChaos).toHaveLength(0);
+  });
+
+  it("tebakan_beruntung: right verdict but incomplete locks -> ZERO reputation", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "one");
+    expect(s.locksOpened).toHaveLength(1);
+    const reputationBefore = s.reputation;
+    const panicBefore = s.panicMeter;
+
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
+    s = act(s, { type: "FLIP_NEWS" });
+
+    expect(s.lastOutcome).toBe("tebakan_beruntung");
+    // Guessing right is not literacy: no reward, and the crisis token stays.
+    expect(s.reputation).toBe(reputationBefore);
+    expect(s.stats.terverifikasi).toBe(0);
+    expect(s.stats.tebakanBeruntung).toBe(1);
+    expect(s.panicMeter).toBe(panicBefore);
+    expect(s.tiles[s.newsTileIndex!].hasCrisisToken).toBe(true);
+    expect(s.activeChaos).toHaveLength(0);
+  });
+
+  it("tebakan_beruntung also covers a right verdict with no locks at all", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "none");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
+    s = act(s, { type: "FLIP_NEWS" });
+    expect(s.lastOutcome).toBe("tebakan_beruntung");
+    expect(s.reputation).toBe(0);
+  });
+
+  it("hoaks_menyebar: wrong verdict -> +1 panic and a Chaos card", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "both");
+    const panicBefore = s.panicMeter;
+    // The outcome itself ticks +1; the card's own "ifIgnored" effect stacks on top.
+    const cardPanic = newsCardById[HOAX_NEWS].ifIgnored.panic ?? 0;
+
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "FLIP_NEWS" });
+
+    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.panicMeter).toBe(panicBefore + 1 + cardPanic);
+    expect(s.activeChaos).toHaveLength(1);
+    expect(s.stats.hoaksMenyebar).toBe(1);
+    expect(s.reputation).toBe(0);
+  });
+
+  it("hoaks_menyebar: abstain never scores, even with both locks open", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "both");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "abstain" });
+    s = act(s, { type: "FLIP_NEWS" });
+    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.reputation).toBe(0);
+    expect(s.activeChaos).toHaveLength(1);
+  });
+
+  it("validates a FAKTA card the same way", () => {
+    const factNews = Object.values(newsCardById).find((c) => c.truth === "fakta")!;
+    let s = toVerdictPhase(factNews.id, "both");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "FLIP_NEWS" });
+    expect(s.lastOutcome).toBe("terverifikasi");
+    expect(s.stats.factsValidated).toBe(1);
+    expect(s.stats.hoaxDebunked).toBe(0);
+  });
+
+  it("keeps the verdict immutable once committed", () => {
+    let s = toVerdictPhase(HOAX_NEWS, "both");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
+    expect(s.verdict).toBe("hoax");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    expect(s.verdict).toBe("hoax");
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "abstain" });
+    expect(s.verdict).toBe("hoax");
+  });
+
+  it("refuses to flip before a verdict is committed", () => {
+    const s = toVerdictPhase(HOAX_NEWS, "both");
+    const after = act(s, { type: "FLIP_NEWS" });
+    expect(after.newsRevealed).toBe(false);
+    expect(after.lastOutcome).toBeNull();
+  });
+
+  it("resolveVerdict implements the truth table directly", () => {
+    const base = toVerdictPhase(HOAX_NEWS, "both");
+    expect(resolveVerdict({ ...base, verdict: "hoax" })).toBe("terverifikasi");
+    expect(resolveVerdict({ ...base, verdict: "fakta" })).toBe("hoaks_menyebar");
+    expect(resolveVerdict({ ...base, verdict: "abstain" })).toBe("hoaks_menyebar");
+    expect(resolveVerdict({ ...base, verdict: null })).toBe("hoaks_menyebar");
+    expect(resolveVerdict({ ...base, verdict: "hoax", locksOpened: [] })).toBe("tebakan_beruntung");
+  });
+});
+
+// ——— Evidence & locks ————————————————————————————————————————————————
+
+describe("evidence locks", () => {
+  it("lets the 3-point HOW wildcard open a non-HOW lock", () => {
+    const newsId = Object.values(newsCardById).find((c) => !c.locks.includes("HOW"))!.id;
+    const news = newsCardById[newsId];
+    const nonHowLock = news.locks.find((l) => l !== "HOW")!;
+    const s = openLock(toTurnsPhase(newGame(), { newsId }), nonHowLock, wildcardEvidenceId);
+    expect(s.locksOpened).toContain(nonHowLock);
+  });
+
+  it("rejects an evidence card whose category does not match the lock", () => {
+    const newsId = "news_st_01"; // HOW + WHEN
+    const s = toTurnsPhase(newGame(), { newsId });
+    const wrong = evidenceIdFor("WHY");
+    s.players[0].hand.push(wrong);
+    const after = act(s, {
+      type: "PLAY_EVIDENCE_LOCK",
+      playerId: s.players[0].id,
+      evidenceId: wrong,
+      lock: "WHEN",
+    });
+    expect(after.locksOpened).toHaveLength(0);
+  });
+
+  it("blocks the WHERE lock while a block_where disaster is active", () => {
+    const newsId = Object.values(newsCardById).find((c) => c.locks.includes("WHERE"))!.id;
+    const s = toTurnsPhase(newGame(), { newsId, disasterId: "dis_vul_03" });
+    expect(s.activeDisaster?.roundEffectKey).toBe("block_where");
+    const id = evidenceIdFor("WHERE");
+    s.players[0].hand.push(id);
+    const after = act(s, {
+      type: "PLAY_EVIDENCE_LOCK",
+      playerId: s.players[0].id,
+      evidenceId: id,
+      lock: "WHERE",
+    });
+    expect(after.locksOpened).not.toContain("WHERE");
+  });
+
+  it("will not open the same lock twice", () => {
+    const newsId = "news_st_01";
+    let s = toTurnsPhase(newGame(), { newsId });
+    s = openLock(s, "WHEN");
+    s = openLock(s, "WHEN");
+    expect(s.locksOpened.filter((l) => l === "WHEN")).toHaveLength(1);
+  });
+});
+
+// ——— Escort ——————————————————————————————————————————————————————————
+
+describe("escort", () => {
+  it("refuses panicked villagers and delivers calm ones to a Pos Siaga", () => {
+    let s = toTurnsPhase(newGame());
+    const pos = posSiagaIndex(s);
+    const tile = tileNextToPosSiaga(s);
+    const player = s.players[0];
+    s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
+    expect(s.players[0].position).toBe(tile.index);
+
+    // Panicked villagers refuse to move.
+    s.tiles[tile.index].occupants[0].status = "panik";
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+    let after = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: player.id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(after.evacuees).toHaveLength(0);
+    expect(after.players[0].position).toBe(tile.index);
+
+    // Calm them and the same escort works.
+    s.tiles[tile.index].occupants[0].status = "tenang";
+    const apBefore = s.players[0].ap;
+    after = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: player.id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(after.evacuees).toHaveLength(1);
+    expect(after.evacuees[0].id).toBe(villagerId);
+    expect(after.evacuees[0].status).toBe("selamat");
+    expect(after.players[0].position).toBe(pos);
+    expect(after.players[0].ap).toBe(apBefore - 1);
+    expect(after.tiles[tile.index].occupants.find((v) => v.id === villagerId)).toBeUndefined();
+  });
+
+  it("lets Harimau move two villagers for a single AP", () => {
+    let s = toTurnsPhase(newGame({ roles: ["harimau", "komodo"] }));
+    const pos = posSiagaIndex(s);
+    const tile = tileNextToPosSiaga(s);
+    const player = s.players[0];
+    s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
+
+    // Seed a second calm villager on the same tile.
+    const extra: VillagerToken = { id: "w-extra", status: "tenang", tileIndex: tile.index };
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    s.tiles[tile.index].occupants.push(extra);
+    const ids = s.tiles[tile.index].occupants.map((v) => v.id);
+    expect(ids.length).toBeGreaterThanOrEqual(2);
+
+    const apBefore = s.players[0].ap;
+    const after = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: player.id,
+      villagerIds: ids.slice(0, 2),
+      targetTileIndex: pos,
+    });
+    expect(after.evacuees).toHaveLength(2);
+    expect(after.players[0].ap).toBe(apBefore - 1);
+  });
+
+  it("caps everyone else at one villager per escort", () => {
+    let s = toTurnsPhase(newGame({ roles: ["komodo", "elang"] }));
+    const pos = posSiagaIndex(s);
+    const tile = tileNextToPosSiaga(s);
+    const player = s.players[0];
+    s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
+    const extra: VillagerToken = { id: "w-extra", status: "tenang", tileIndex: tile.index };
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    s.tiles[tile.index].occupants.push(extra);
+    const ids = s.tiles[tile.index].occupants.map((v) => v.id).slice(0, 2);
+
+    const after = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: player.id,
+      villagerIds: ids,
+      targetTileIndex: pos,
+    });
+    expect(after.evacuees).toHaveLength(0);
+  });
+});
+
+// ——— Damage ————————————————————————————————————————————————————————
+
+describe("2-stage tile damage", () => {
+  it("cracks first, destroys second, and only then loses the villagers", () => {
+    // dis_tek_02 damages one tile in sector merah every round.
+    const opts = { disasterId: "dis_tek_02", newsId: TEAL_NEWS, verdict: "fakta" as Verdict };
+    let s = playRound(newGame({ difficulty: "siaga" }), opts);
+    expect(s.phase).toBe("p5_impact");
+
+    const cracked = s.tiles.filter((t) => t.damage === 1);
+    expect(cracked.length).toBeGreaterThan(0);
+    const victim = cracked[0].index;
+    const villagersThere = s.tiles[victim].occupants.length;
+    expect(s.casualties).toHaveLength(0);
+
+    s = act(s, { type: "ADVANCE_PHASE" }); // next round
+    s = playRound(s, opts);
+
+    expect(s.tiles[victim].damage).toBe(2);
+    expect(s.tiles[victim].occupants).toHaveLength(0);
+    expect(s.casualties).toHaveLength(villagersThere);
+    for (const v of s.casualties) expect(v.status).toBe("hilang");
+  });
+
+  it("never damages a Pos Siaga tile", () => {
+    let s = newGame({ difficulty: "siaga" });
+    for (let round = 0; round < 4 && s.phase !== "game_over"; round++) {
+      s = playRound(s, { newsId: TEAL_NEWS, verdict: "fakta" });
+      if (s.phase === "p5_impact") s = act(s, { type: "ADVANCE_PHASE" });
+    }
+    for (const tile of s.tiles) {
+      if (tile.isPosSiaga) expect(tile.damage).toBe(0);
+    }
+  });
+
+  it("makes a Hancur tile impassable and a Retak tile cost more", () => {
+    const s = toTurnsPhase(newGame());
+    const player = s.players[0];
+    const [rimTarget] = rimNeighbors(player.position, s.tiles.length).filter(
+      (i) => !s.tiles[i].isPosSiaga
     );
-    expect(s.players[0].ap).toBe(3 + 2);
+
+    s.tiles[rimTarget].damage = 1;
+    expect(moveCost(s, player.position, rimTarget, s.players[1])).toBe(2);
+
+    s.tiles[rimTarget].damage = 2;
+    const after = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: player.id,
+      targetTileIndex: rimTarget,
+    });
+    expect(after.players[0].position).toBe(player.position);
+  });
+});
+
+// ——— Turn economy ————————————————————————————————————————————————————
+
+describe("turn economy", () => {
+  it("hands out 4 AP per player in Fase 3", () => {
+    const s = toTurnsPhase(newGame({ roles: ["elang", "komodo", "harimau"] }));
+    for (const p of s.players) expect(p.ap).toBe(4);
+  });
+
+  it("passes the turn round the table and then opens Fase 4", () => {
+    let s = toTurnsPhase(newGame({ roles: ["elang", "komodo", "harimau"] }));
+    expect(s.currentPlayerIndex).toBe(0);
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(s.currentPlayerIndex).toBe(1);
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(s.currentPlayerIndex).toBe(2);
+    expect(s.phase).toBe("p3_turns");
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(s.phase).toBe("p4_verdict");
+  });
+
+  it("enforces the hand limit at end of turn (4, but 6 for Orangutan)", () => {
+    let s = toTurnsPhase(newGame({ roles: ["komodo", "orangutan"] }));
+    s.players[0].hand = Array.from({ length: 9 }, () => evidenceIdFor("WHO"));
+    s.players[1].hand = Array.from({ length: 9 }, () => evidenceIdFor("WHO"));
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(s.players[0].hand).toHaveLength(4);
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(s.players[1].hand).toHaveLength(6);
+  });
+
+  it("spends AP on investigate and refuses actions without enough AP", () => {
+    let s = toTurnsPhase(newGame());
+    const id = s.players[0].id;
+    const handBefore = s.players[0].hand.length;
+    s = act(s, { type: "INVESTIGATE", playerId: id });
+    expect(s.players[0].ap).toBe(3);
+    expect(s.players[0].hand).toHaveLength(handBefore + 1);
+
+    s.players[0].ap = 0;
+    const after = act(s, { type: "INVESTIGATE", playerId: id });
+    expect(after.players[0].hand).toHaveLength(handBefore + 1);
+  });
+
+  it("guards actions to their own phase", () => {
+    const s = newGame(); // still p1_disaster
+    const before = s.players[0].position;
+    const after = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: s.players[0].id,
+      targetTileIndex: (before + 1) % s.tiles.length,
+    });
+    expect(after.players[0].position).toBe(before);
+    expect(act(s, { type: "DRAW_NEWS" }).activeNews).toBeNull();
+  });
+});
+
+// ——— Role abilities ————————————————————————————————————————————————
+
+describe("active abilities", () => {
+  it("is limited to once per round", () => {
+    let s = toTurnsPhase(newGame({ roles: ["elang", "komodo"] }));
+    s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: s.players[0].id, deck: "disaster" });
+    expect(s.players[0].activeUsedThisRound).toBe(true);
+    expect(s.peek?.kind).toBe("disaster");
+
+    s = act(s, { type: "CLEAR_PEEK" });
+    s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: s.players[0].id, deck: "news" });
+    expect(s.peek).toBeNull();
+  });
+
+  it("lets Komodo calm up to 3 panicked villagers at once for 0 AP", () => {
+    let s = toTurnsPhase(newGame({ roles: ["komodo", "elang"] }));
+    const tile = tileNextToPosSiaga(s);
+    const player = s.players[0];
+    s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
+    for (let i = 0; i < 3; i++) {
+      s.tiles[tile.index].occupants.push({
+        id: `panic-${i}`,
+        status: "panik",
+        tileIndex: tile.index,
+      });
+    }
+    const apBefore = s.players[0].ap;
+    s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: player.id });
+    expect(s.players[0].ap).toBe(apBefore);
+    expect(s.tiles[tile.index].occupants.filter((v) => v.status === "panik")).toHaveLength(0);
+  });
+
+  it("lets Orangutan force a lock open by discarding two evidence cards", () => {
+    const newsId = "news_st_01";
+    let s = toTurnsPhase(newGame({ roles: ["orangutan", "komodo"] }), { newsId });
+    const a = evidenceIdFor("WHY");
+    const b = evidenceIdFor("WHO");
+    s.players[0].hand.push(a, b);
+    s = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      evidenceIds: [a, b],
+      lock: "WHEN",
+    });
+    expect(s.locksOpened).toContain("WHEN");
+  });
+});
+
+// ——— Resources ————————————————————————————————————————————————————
+
+describe("discard for resource", () => {
+  it("grants +2 AP for a Sprint Darurat card", () => {
+    let s = toTurnsPhase(newGame());
+    const card = evidenceCards.find((c) => c.resourceKind === "ap2")!;
+    s.players[0].hand.push(card.id);
+    const apBefore = s.players[0].ap;
+    s = act(s, {
+      type: "DISCARD_FOR_RESOURCE",
+      playerId: s.players[0].id,
+      evidenceId: card.id,
+    });
+    expect(s.players[0].ap).toBe(apBefore + 2);
+  });
+
+  it("raises a panic shield that blocks the hoaks_menyebar panic tick", () => {
+    const newsId = "news_st_01";
+    let s = toTurnsPhase(newGame(), { newsId });
+    const card = evidenceCards.find((c) => c.resourceKind === "panic_shield")!;
+    s.players[0].hand.push(card.id);
+    s = act(s, {
+      type: "DISCARD_FOR_RESOURCE",
+      playerId: s.players[0].id,
+      evidenceId: card.id,
+    });
+    expect(s.panicShield).toBe(true);
+
+    s = endAllTurns(s);
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "FLIP_NEWS" });
+    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.panicMeter).toBe(0);
+  });
+});
+
+// ——— Rewards ————————————————————————————————————————————————————————
+
+describe("reputation economy", () => {
+  it("buys a Reward card in Fase 5 and spends the reputation", () => {
+    let s = playRound(newGame({ difficulty: "siaga" }), {
+      newsId: TEAL_NEWS,
+      verdict: "fakta",
+    });
+    expect(s.phase).toBe("p5_impact");
+    s = act(s, { type: "DEBUG_SET_REPUTATION", value: 9 });
+    s = act(s, { type: "BUY_REWARD", rewardId: "rew_peta_evakuasi" });
+    expect(s.ownedRewards).toContain("rew_peta_evakuasi");
+    expect(s.reputation).toBe(7);
+
+    // Not affordable / already owned -> no change.
+    const again = act(s, { type: "BUY_REWARD", rewardId: "rew_peta_evakuasi" });
+    expect(again.reputation).toBe(7);
+    expect(again.ownedRewards).toHaveLength(1);
+  });
+});
+
+// ——— Win / lose ————————————————————————————————————————————————————
+
+describe("game over", () => {
+  it("menang — reaching the evacuation target", () => {
+    let s = toTurnsPhase(newGame({ difficulty: "siaga" }));
+    const target = 8;
+    const pos = posSiagaIndex(s);
+    const tile = tileNextToPosSiaga(s);
+    s = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: s.players[0].id,
+      targetTileIndex: tile.index,
+    });
+    // One short of the target, then walk the last villager in.
+    s.evacuees = Array.from({ length: target - 1 }, (_, i) => ({
+      id: `pre-${i}`,
+      status: "selamat" as const,
+      tileIndex: pos,
+    }));
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+    s = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: s.players[0].id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(s.evacuees).toHaveLength(target);
+    expect(s.phase).toBe("game_over");
+    expect(s.gameOverReason).toBe("menang");
+  });
+
+  it("panik — the panic meter maxes out", () => {
+    let s = toTurnsPhase(newGame());
+    s = act(s, { type: "DEBUG_SET_PANIC", value: s.panicMeterMax });
+    expect(s.phase).toBe("game_over");
+    expect(s.gameOverReason).toBe("panik");
+  });
+
+  it("korban — too few villagers left to ever reach the target", () => {
+    let s = toTurnsPhase(newGame({ difficulty: "siaga" }));
+    for (const tile of s.tiles) tile.occupants = [];
+    s.evacuees = [];
+    s = act(s, { type: "DEBUG_SET_PANIC", value: 0 });
+    expect(s.phase).toBe("game_over");
+    expect(s.gameOverReason).toBe("korban");
+  });
+
+  it("waktu — the disaster deck runs out before the target is met", () => {
+    let s = newGame({ difficulty: "siaga" });
+    s = act(s, { type: "DEBUG_SET_DISASTER_TOP", cardId: CALM_DISASTER });
+    s = act(s, { type: "DEBUG_TRIM_DISASTER_DECK" });
+    expect(s.decks.disaster).toHaveLength(1);
+
+    s = playRound(s, { newsId: TEAL_NEWS, verdict: "fakta" });
+    expect(s.decks.disaster).toHaveLength(0);
+    expect(s.phase).toBe("game_over");
+    expect(s.gameOverReason).toBe("waktu");
+  });
+
+  it("checkGameOver reports every reason from a raw state", () => {
+    const base = newGame({ difficulty: "siaga" });
+    expect(checkGameOver(base).over).toBe(false);
+
+    const won = structuredClone(base);
+    won.evacuees = Array.from({ length: 8 }, (_, i) => ({
+      id: `e${i}`,
+      status: "selamat" as const,
+      tileIndex: 0,
+    }));
+    expect(checkGameOver(won)).toEqual({ over: true, reason: "menang" });
+
+    const panicked = structuredClone(base);
+    panicked.panicMeter = panicked.panicMeterMax;
+    expect(checkGameOver(panicked)).toEqual({ over: true, reason: "panik" });
+
+    const wiped = structuredClone(base);
+    for (const t of wiped.tiles) t.occupants = [];
+    expect(checkGameOver(wiped)).toEqual({ over: true, reason: "korban" });
+
+    const outOfTime = structuredClone(base);
+    outOfTime.decks.disaster = [];
+    expect(checkGameOver(outOfTime, { endOfRound: true })).toEqual({
+      over: true,
+      reason: "waktu",
+    });
+    // ...but not mid-round, while the current round is still being played.
+    expect(checkGameOver(outOfTime).over).toBe(false);
+  });
+
+  it("freezes the state once the game is over", () => {
+    let s = toTurnsPhase(newGame());
+    s = act(s, { type: "DEBUG_SET_PANIC", value: s.panicMeterMax });
+    const frozen = act(s, { type: "ADVANCE_PHASE" });
+    expect(frozen).toBe(s);
+  });
+});
+
+// ——— Smoke test ————————————————————————————————————————————————————
+
+describe("full game smoke test", () => {
+  it("plays many rounds to a terminal state without throwing", () => {
+    const verdicts: Verdict[] = ["hoax", "fakta", "abstain"];
+    let s = newGame({ roles: ["elang", "orangutan", "harimau", "monyet", "komodo"], seed: 42 });
+    let guard = 0;
+
+    while (s.phase !== "game_over" && guard < 60) {
+      guard++;
+      s = act(s, { type: "DRAW_DISASTER" });
+      if (s.phase === "game_over") break;
+      s = act(s, { type: "ADVANCE_PHASE" });
+      s = act(s, { type: "DRAW_NEWS" });
+      s = act(s, { type: "ADVANCE_PHASE" });
+
+      // Everyone investigates once, then ends their turn.
+      for (let i = 0; i < s.players.length; i++) {
+        const p = s.players[s.currentPlayerIndex];
+        s = act(s, { type: "INVESTIGATE", playerId: p.id });
+        s = act(s, { type: "END_PLAYER_TURN" });
+      }
+      expect(s.phase).toBe("p4_verdict");
+
+      if (s.activeNews) {
+        for (const lock of s.activeNews.locks) {
+          if (guard % 2 === 0) s = openLock(s, lock);
+        }
+      }
+      s = act(s, { type: "COMMIT_VERDICT", verdict: verdicts[guard % verdicts.length] });
+      s = act(s, { type: "FLIP_NEWS" });
+      if (s.phase === "game_over") break;
+
+      s = act(s, { type: "ADVANCE_PHASE" }); // -> p5_impact
+      if (s.phase === "game_over") break;
+      s = act(s, { type: "ADVANCE_PHASE" }); // -> next round
+    }
+
+    expect(s.phase).toBe("game_over");
+    expect(["menang", "panik", "korban", "waktu"]).toContain(s.gameOverReason);
+    expect(s.round).toBeGreaterThan(1);
+    // Bookkeeping stayed coherent all the way through.
+    const scenario = scenarioById[SCENARIO_ID];
+    const accounted =
+      villagerCountOnBoard(s) + s.evacuees.length + s.casualties.length;
+    expect(accounted).toBe(scenario.totalVillagers);
+    for (const p of s.players) expect(p.ap).toBeGreaterThanOrEqual(0);
+    expect(s.panicMeter).toBeGreaterThanOrEqual(0);
+    expect(s.log.length).toBeGreaterThan(10);
+  });
+
+  it("rotates the first player each round", () => {
+    let s = playRound(newGame({ difficulty: "siaga" }), {
+      newsId: TEAL_NEWS,
+      verdict: "fakta",
+    });
+    expect(s.firstPlayerIndex).toBe(0);
+    s = act(s, { type: "ADVANCE_PHASE" });
+    expect(s.round).toBe(2);
+    expect(s.firstPlayerIndex).toBe(1 % s.players.length);
+    expect(s.phase).toBe("p1_disaster");
+    expect(s.activeDisaster).toBeNull();
+    expect(s.activeNews).toBeNull();
+    expect(s.verdict).toBeNull();
+    expect(s.newsRevealed).toBe(false);
   });
 });
