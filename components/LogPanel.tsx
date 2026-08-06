@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ScrollText } from "lucide-react";
 import type { GameLogEntry } from "@/engine/types";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 export function LogPanel({ log }: { log: GameLogEntry[] }) {
   const [open, setOpen] = useState(false);

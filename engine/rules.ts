@@ -43,7 +43,7 @@ export const HAND_LIMIT = cfg("handLimit", 4);
 export const HAND_LIMIT_SCHOLAR = cfg("handLimitScholar", 6);
 export const MOVE_COST = cfg("moveCost", 1);
 export const RETAK_MOVE_COST = cfg("moveCostRetak", 2);
-export const SEA_ROUTE_COST = cfg("seaRouteCost", 2);
+export const SEA_LANE_COST = cfg("seaLaneCost", 2);
 export const ESCORT_COST = cfg("escortCost", 1);
 export const CALM_COST = cfg("calmCost", 2);
 export const CALM_COST_STORM = cfg("calmCostStorm", 3);
@@ -51,40 +51,17 @@ export const INVESTIGATE_COST = cfg("investigateCost", 1);
 export const BARTER_COST = cfg("barterCost", 1);
 export const SUB_MISSION_REPUTATION = cfg("reputationPerSubMission", 2);
 
-export interface DifficultyPreset {
-  targetEvacuation: number;
-  panicMeterMax: number;
-  disasterDeckSize: number;
-}
+// v3 has exactly ONE difficulty — no presets, no picker. The numbers live in
+// data/gameConfig.ts and are tuned in engine/balance.test.ts.
+export const TOTAL_VILLAGERS = cfg("totalVillagers", 18);
+export const TARGET_EVACUATION = cfg("targetEvacuation", 15);
+export const PANIC_METER_MAX = cfg("panicMeterMax", 6);
+export const DISASTER_DECK_SIZE = cfg("disasterDeckSize", 12);
+export const SEA_LANE_MAX_VILLAGERS = cfg("seaLaneMaxVillagers", 1);
 
-const DEFAULT_PRESETS: Record<GameState["difficulty"], DifficultyPreset> = {
-  siaga: { targetEvacuation: 8, panicMeterMax: 10, disasterDeckSize: 18 },
-  awas: { targetEvacuation: 10, panicMeterMax: 8, disasterDeckSize: 16 },
-  darurat: { targetEvacuation: 12, panicMeterMax: 6, disasterDeckSize: 14 },
-};
-
-/** data/gameConfig may ship its own presets; merge them over the defaults. */
-export const DIFFICULTY_PRESETS: Record<GameState["difficulty"], DifficultyPreset> = (() => {
-  const override = (rawConfig["difficulties"] ?? rawConfig["difficultyPresets"]) as
-    | Partial<Record<GameState["difficulty"], Partial<DifficultyPreset>>>
-    | undefined;
-  const out = { ...DEFAULT_PRESETS };
-  if (override && typeof override === "object") {
-    for (const key of Object.keys(out) as GameState["difficulty"][]) {
-      const patch = override[key];
-      if (patch && typeof patch === "object") out[key] = { ...out[key], ...patch };
-    }
-  }
-  return out;
-})();
-
-export function difficultyPreset(state: GameState): DifficultyPreset {
-  return DIFFICULTY_PRESETS[state.difficulty] ?? DEFAULT_PRESETS.awas;
-}
-
-/** How many villagers must reach a Pos Siaga to win. */
+/** How many villagers must reach a Ready Post to win. */
 export function targetEvacuation(state: GameState): number {
-  return difficultyPreset(state).targetEvacuation;
+  return getScenario(state)?.targetEvacuation ?? TARGET_EVACUATION;
 }
 
 // ——— PRNG ————————————————————————————————————————————————————————————
@@ -136,7 +113,7 @@ export function isAirborne(player?: Player): boolean {
 // ——— Ring topology ——————————————————————————————————————————————————
 
 export function ringSize(state: GameState): number {
-  return state.tiles.length;
+  return getScenario(state)?.ringSize ?? state.tiles.length;
 }
 
 /** The rim is a closed loop: (i-1+N)%N and (i+1)%N. */
@@ -148,28 +125,48 @@ export function rimNeighbors(i: number, size: number): number[] {
   return prev === next ? [prev] : [prev, next];
 }
 
-/** The 4 Sea Route edges, each joining two ADJACENT Pos Siaga. */
-export function seaRouteNeighbors(i: number, scenario: Scenario): number[] {
-  const routes = scenario?.seaRoutes ?? [];
+/**
+ * The Sea Lane is an explicit chain of tiles through the hole in the ring:
+ *   Ready Post A <-> 24 <-> 25 <-> 26 <-> Ready Post B
+ * Its indices sit OUTSIDE rim arithmetic, so they are never fed to rimNeighbors.
+ */
+export function seaLaneChain(scenario: Scenario): number[] {
+  const lane = scenario?.seaLaneIndices ?? [];
+  const [a, b] = scenario?.seaLaneEndpoints ?? [0, 0];
+  return [a, ...lane, b];
+}
+
+export function isSeaLaneTile(scenario: Scenario, i: number): boolean {
+  return (scenario?.seaLaneIndices ?? []).includes(i);
+}
+
+/** Neighbours along the Sea Lane chain only. */
+export function seaLaneNeighbors(i: number, scenario: Scenario): number[] {
+  const chain = seaLaneChain(scenario);
   const out: number[] = [];
-  for (const [a, b] of routes) {
-    if (a === i && !out.includes(b)) out.push(b);
-    if (b === i && !out.includes(a)) out.push(a);
-  }
+  chain.forEach((node, k) => {
+    if (node !== i) return;
+    const prev = chain[k - 1];
+    const next = chain[k + 1];
+    if (prev !== undefined && !out.includes(prev)) out.push(prev);
+    if (next !== undefined && !out.includes(next)) out.push(next);
+  });
   return out;
 }
 
-/** Sea Routes shut completely while an Oseanografi disaster is active. */
-export function isSeaRouteOpen(state: GameState): boolean {
-  if (state.activeDisaster?.category === "oseanografi") return false;
-  return state.seaRouteOpen !== false;
+/** The Sea Lane shuts completely while an Oceanic disaster is active. */
+export function isSeaLaneOpen(state: GameState): boolean {
+  if (state.activeDisaster?.category === "oceanic") return false;
+  return state.seaLaneOpen !== false;
 }
 
-/** Rim neighbours plus any currently-open sea route neighbours. */
+/** Rim neighbours plus any currently-open Sea Lane neighbours. */
 export function allNeighbors(state: GameState, i: number): number[] {
-  const out = rimNeighbors(i, ringSize(state));
-  if (isSeaRouteOpen(state)) {
-    for (const n of seaRouteNeighbors(i, getScenario(state))) {
+  const scenario = getScenario(state);
+  // Sea Lane tiles have no rim neighbours at all — only the chain.
+  const out = isSeaLaneTile(scenario, i) ? [] : rimNeighbors(i, ringSize(state));
+  if (isSeaLaneOpen(state)) {
+    for (const n of seaLaneNeighbors(i, scenario)) {
       if (!out.includes(n)) out.push(n);
     }
   }
@@ -180,8 +177,8 @@ export function areRimAdjacent(state: GameState, a: number, b: number): boolean 
   return rimNeighbors(a, ringSize(state)).includes(b);
 }
 
-export function areSeaRouteLinked(state: GameState, a: number, b: number): boolean {
-  return seaRouteNeighbors(a, getScenario(state)).includes(b);
+export function areSeaLaneLinked(state: GameState, a: number, b: number): boolean {
+  return seaLaneNeighbors(a, getScenario(state)).includes(b);
 }
 
 // ——— Tiles & villagers ————————————————————————————————————————————————
@@ -189,12 +186,12 @@ export function areSeaRouteLinked(state: GameState, a: number, b: number): boole
 /** Hancur (damage 2) tiles can never be entered. Pos Siaga is damage-immune. */
 export function isPassable(tile: TileState | undefined): boolean {
   if (!tile) return false;
-  if (tile.isPosSiaga) return true;
+  if (tile.isReadyPost) return true;
   return tile.damage < 2;
 }
 
-export function isPosSiaga(tile: TileState | undefined): boolean {
-  return !!tile?.isPosSiaga;
+export function isReadyPost(tile: TileState | undefined): boolean {
+  return !!tile?.isReadyPost;
 }
 
 export function villagersOnBoard(state: GameState): VillagerToken[] {
@@ -281,8 +278,8 @@ export function handLimit(state: GameState, player: Player): number {
 }
 
 /** AP for one Sea Route hop — 2, or 1 once the team owns "Peta Evakuasi". */
-export function seaRouteCost(state: GameState): number {
-  return hasReward(state, "sea_route_cheap") ? 1 : SEA_ROUTE_COST;
+export function seaLaneCost(state: GameState): number {
+  return hasReward(state, "sea_lane_cheap") ? 1 : SEA_LANE_COST;
 }
 
 function terrainAndWeather(
@@ -290,13 +287,13 @@ function terrainAndWeather(
   fromIndex: number,
   toIndex: number,
   player: Player | undefined,
-  viaSeaRoute: boolean
+  viaSeaLane: boolean
 ): number {
   if (isAirborne(player)) return 0; // Elang ignores terrain + weather entirely
   let extra = 0;
   const to = state.tiles[toIndex];
   const from = state.tiles[fromIndex];
-  if (!viaSeaRoute && to && to.damage === 1) extra += RETAK_MOVE_COST - MOVE_COST;
+  if (!viaSeaLane && to && to.damage === 1) extra += RETAK_MOVE_COST - MOVE_COST;
   const key = state.activeDisaster?.roundEffectKey;
   if (key === "move_penalty") extra += 1;
   if (key === "coast_exit_penalty" && from && isSectorAffected(state, from.sectorId)) extra += 1;
@@ -309,10 +306,10 @@ export function moveCost(
   fromIndex: number,
   toIndex: number,
   player?: Player,
-  viaSeaRoute = false
+  viaSeaLane = false
 ): number {
-  const base = viaSeaRoute ? seaRouteCost(state) : MOVE_COST;
-  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaRoute);
+  const base = viaSeaLane ? seaLaneCost(state) : MOVE_COST;
+  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaLane);
   // "Jalur Alternatif" cancels one terrain/weather penalty.
   if (player?.altRouteReady && extra > 0) extra = 0;
   return Math.max(0, base + extra);
@@ -324,10 +321,10 @@ export function escortCost(
   fromIndex: number,
   toIndex: number,
   player?: Player,
-  viaSeaRoute = false
+  viaSeaLane = false
 ): number {
-  const base = viaSeaRoute ? seaRouteCost(state) : ESCORT_COST;
-  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaRoute);
+  const base = viaSeaLane ? seaLaneCost(state) : ESCORT_COST;
+  let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaLane);
   if (player?.altRouteReady && extra > 0) extra = 0;
   return Math.max(0, base + extra);
 }
@@ -348,20 +345,20 @@ export function escortBlocked(state: GameState, from: TileState, to: TileState):
 }
 
 /** How many villagers one escort action may take. */
-export function maxEscortGroup(player: Player | undefined, viaSeaRoute: boolean): number {
-  if (viaSeaRoute) return 1; // Rute Laut: maks 1 warga, always
+export function maxEscortGroup(player: Player | undefined, viaSeaLane: boolean): number {
+  if (viaSeaLane) return 1; // Rute Laut: maks 1 warga, always
   return player && hasAbility(player, "tactical_escort") ? 2 : 1;
 }
 
 // ——— Pathing ——————————————————————————————————————————————————————————
 
 /** One step from `from` toward the nearest Pos Siaga. BFS over passable tiles. */
-export function stepTowardNearestPosSiaga(state: GameState, from: number): number | null {
+export function stepTowardNearestReadyPost(state: GameState, from: number): number | null {
   const visited = new Set<number>([from]);
   const queue: { index: number; first: number | null }[] = [{ index: from, first: null }];
   while (queue.length > 0) {
     const { index, first } = queue.shift()!;
-    if (index !== from && isPosSiaga(state.tiles[index])) return first;
+    if (index !== from && isReadyPost(state.tiles[index])) return first;
     for (const n of allNeighbors(state, index)) {
       if (visited.has(n)) continue;
       if (!isPassable(state.tiles[n])) continue;
@@ -378,7 +375,7 @@ export function nearestPanickedVillager(state: GameState, from: number): Village
   const queue: number[] = [from];
   while (queue.length > 0) {
     const index = queue.shift()!;
-    const panicked = state.tiles[index]?.occupants.find((v) => v.status === "panik");
+    const panicked = state.tiles[index]?.occupants.find((v) => v.status === "panicked");
     if (panicked) return panicked;
     for (const n of allNeighbors(state, index)) {
       if (visited.has(n)) continue;
@@ -394,7 +391,7 @@ export function nearestSafeStep(state: GameState, from: number): number | null {
   for (const n of allNeighbors(state, from)) {
     if (isPassable(state.tiles[n])) return n;
   }
-  const anyPos = state.tiles.find((t) => t.isPosSiaga);
+  const anyPos = state.tiles.find((t) => t.isReadyPost);
   return anyPos ? anyPos.index : null;
 }
 
@@ -410,18 +407,18 @@ export function bothLocksOpened(state: GameState): boolean {
  * THE TRUTH TABLE.
  *
  *  verdict === truth  &&  both locks opened  ->  terverifikasi
- *  verdict === truth  &&  locks incomplete   ->  tebakan_beruntung
- *  verdict !== truth  ||  abstain / none     ->  hoaks_menyebar
+ *  verdict === truth  &&  locks incomplete   ->  lucky_guess
+ *  verdict !== truth  ||  abstain / none     ->  rumour_spreads
  *
- * `tebakan_beruntung` is the educational heart: guessing right is not literacy.
+ * `lucky_guess` is the educational heart: guessing right is not literacy.
  */
 export function resolveVerdict(state: GameState): VerdictOutcome {
   const news = state.activeNews;
-  if (!news) return "hoaks_menyebar";
+  if (!news) return "rumour_spreads";
   const verdict = state.verdict;
-  if (verdict === null || verdict === "abstain") return "hoaks_menyebar";
-  if (verdict !== news.truth) return "hoaks_menyebar";
-  return bothLocksOpened(state) ? "terverifikasi" : "tebakan_beruntung";
+  if (verdict === null || verdict === "abstain") return "rumour_spreads";
+  if (verdict !== news.truth) return "rumour_spreads";
+  return bothLocksOpened(state) ? "verified" : "lucky_guess";
 }
 
 // ——— Win / lose ————————————————————————————————————————————————————————
@@ -437,14 +434,14 @@ export function checkGameOver(
   opts: { endOfRound?: boolean } = {}
 ): { over: boolean; reason?: GameOverReason } {
   const target = targetEvacuation(state);
-  if (state.evacuees.length >= target) return { over: true, reason: "menang" };
-  if (state.panicMeter >= state.panicMeterMax) return { over: true, reason: "panik" };
+  if (state.evacuees.length >= target) return { over: true, reason: "win" };
+  if (state.panicMeter >= state.panicMeterMax) return { over: true, reason: "panic" };
 
-  const alive = villagersOnBoard(state).filter((v) => v.status !== "hilang").length;
-  if (state.evacuees.length + alive < target) return { over: true, reason: "korban" };
+  const alive = villagersOnBoard(state).filter((v) => v.status !== "lost").length;
+  if (state.evacuees.length + alive < target) return { over: true, reason: "casualties" };
 
   const timeIsUp = opts.endOfRound === true || state.phase === "p5_impact";
-  if (timeIsUp && state.decks.disaster.length === 0) return { over: true, reason: "waktu" };
+  if (timeIsUp && state.decks.disaster.length === 0) return { over: true, reason: "timeout" };
 
   return { over: false };
 }

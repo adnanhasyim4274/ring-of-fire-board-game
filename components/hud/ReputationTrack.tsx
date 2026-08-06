@@ -2,7 +2,7 @@
 import { motion } from "framer-motion";
 import { Award } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * Jalur Poin Reputasi (0..max). Mata uang tim: didapat dari verifikasi yang

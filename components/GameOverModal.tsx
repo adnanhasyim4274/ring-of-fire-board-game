@@ -4,7 +4,7 @@ import { GraduationCap, PartyPopper, Skull } from "lucide-react";
 import type { GameAction, GameState } from "@/engine/types";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 export function GameOverModal({
   state,
@@ -16,15 +16,15 @@ export function GameOverModal({
   const router = useRouter();
   if (state.phase !== "game_over" || !state.gameOverReason) return null;
 
-  const won = state.gameOverReason === "menang";
+  const won = state.gameOverReason === "win";
   const stats: [string, number][] = [
     [id.gameOver.stats.rounds, state.round],
     [id.gameOver.stats.evacuated, state.evacuees.length],
     [id.gameOver.stats.lost, state.casualties.length],
     [id.gameOver.stats.reputation, state.reputation],
-    [id.gameOver.stats.terverifikasi, state.stats.terverifikasi],
-    [id.gameOver.stats.tebakanBeruntung, state.stats.tebakanBeruntung],
-    [id.gameOver.stats.hoaksMenyebar, state.stats.hoaksMenyebar],
+    [id.gameOver.stats.verified, state.stats.verified],
+    [id.gameOver.stats.luckyGuess, state.stats.luckyGuess],
+    [id.gameOver.stats.rumourSpreads, state.stats.rumourSpreads],
     [id.gameOver.stats.hoaxDebunked, state.stats.hoaxDebunked],
     [id.gameOver.stats.factsValidated, state.stats.factsValidated],
     [id.gameOver.stats.subMissions, state.stats.subMissionsDone],
@@ -59,7 +59,7 @@ export function GameOverModal({
           </dl>
         </section>
 
-        {state.stats.tebakanBeruntung > 0 && (
+        {state.stats.luckyGuess > 0 && (
           <p className="flex items-start gap-2 rounded-xl border-2 border-amber-400 bg-amber-50 p-2.5 text-left text-xs font-bold leading-snug text-amber-900">
             <GraduationCap className="mt-0.5 h-4 w-4 shrink-0" />
             {id.gameOver.literacyNote}

@@ -7,7 +7,7 @@ import { evidenceCardById } from "@/data/evidenceCards";
 import { isCategoryBlocked } from "@/lib/engineBridge";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_CLASS, EVIDENCE_CATEGORY_ICON } from "@/lib/theme";
 
 export function EvidenceCardHand({

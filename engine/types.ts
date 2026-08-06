@@ -1,44 +1,54 @@
 // ============================================================================
-// RING OF FIRE — Shared type contract v2.0
-// Canonical rules: E:\archives\ringoffire\docs\00-MASTER-SPEC-v2.md
+// RING OF FIRE — Shared type contract v3.0
+// Canonical rules: E:\archives\ringoffire\docs\00-MASTER-SPEC-v3.md
 // Every chunk depends on this file. Do not change without updating the spec.
 // ============================================================================
 
 // ——— Board topology ————————————————————————————————————————————————
 // The board IS a ring. Tiles are a closed loop of `ringSize` indices.
 // Adjacency along the rim: (i-1+N)%N and (i+1)%N.
-// Sea Routes add 4 extra edges, each connecting two ADJACENT Pos Siaga
-// (arcs hugging the inner rim, never crossing the centre).
+// Rim adjacency covers indices 0..23 only. The 3 Sea Lane tiles (24..26) form
+// an explicit chain: Ready Post 0 <-> 24 <-> 25 <-> 26 <-> Ready Post 12.
 
-export type SectorId = "merah" | "teal" | "kuning" | "biru";
+export type SectorId =
+  | "sunda"
+  | "philippine"
+  | "hokkaido"
+  | "cascadia"
+  | "andes"
+  | "south_pacific";
 
 export interface Sector {
   id: SectorId;
-  name: string;          // "Busur Vulkanik"
-  region: string;        // "Jawa, Sumatra, Sunda Strait"
-  hoaxTheme: string;     // tema hoaks khas sektor ini
-  tileIndices: number[]; // 6 tiles per sector
+  name: string;          // "Sunda Arc"
+  region: string;        // "Java, Sumatra, Sunda Strait"
+  hoaxTheme: string;     // the hoax flavour this sector is known for
+  tileIndices: number[]; // 3 land tiles per sector
 }
 
 export interface TileType {
   id: string;
   name: string;
-  isPosSiaga?: boolean;
+  isReadyPost?: boolean;
+  isSeaLane?: boolean;
 }
 
 export interface Scenario {
   id: string;
   name: string;
-  ringSize: number;                  // 28
-  layout: string[];                  // tileType id per ring index
-  regionNames: string[];             // real-world label per tile
-  sectors: Sector[];
-  posSiagaIndices: number[];         // [0, 7, 14, 21]
-  seaRoutes: [number, number][];     // [[0,7],[7,14],[14,21],[21,0]]
-  villagerSetup: number[];           // villagers per ring index
-  totalVillagers: number;            // 16
-  targetEvacuation: number;          // 10
-  disasterDeckSize: number;          // 16
+  /** Rim tiles ONLY (24). Sea Lane tiles sit outside the ring arithmetic. */
+  ringSize: number;
+  layout: string[];                    // tileType id per index, length 27
+  regionNames: string[];               // real-world label per tile, length 27
+  sectors: Sector[];                   // 6
+  readyPostIndices: number[];          // [0, 4, 8, 12, 16, 20]
+  seaLaneIndices: number[];            // [24, 25, 26]
+  /** The two opposite Ready Posts the Sea Lane joins: [0, 12]. */
+  seaLaneEndpoints: [number, number];
+  villagerSetup: number[];             // villagers per index, length 27
+  totalVillagers: number;              // 18
+  targetEvacuation: number;            // 12
+  disasterDeckSize: number;            // 14
 }
 
 // ——— Cards ——————————————————————————————————————————————————————————
@@ -46,16 +56,16 @@ export interface Scenario {
 export type EvidenceCategory = "WHAT" | "WHERE" | "WHEN" | "WHO" | "WHY" | "HOW";
 
 export type NewsCategory =
-  | "sosial_takhayul"
-  | "manipulasi_visual"
-  | "motif_penipuan"
-  | "pseudosains";
+  | "social_superstition"
+  | "visual_manipulation"
+  | "fraud_motive"
+  | "pseudoscience";
 
 /** The verdict the table can commit to. */
-export type Verdict = "hoax" | "fakta" | "abstain";
+export type Verdict = "hoax" | "fact" | "abstain";
 
 /** The three possible resolutions of Commit & Flip. */
-export type VerdictOutcome = "terverifikasi" | "tebakan_beruntung" | "hoaks_menyebar";
+export type VerdictOutcome = "verified" | "lucky_guess" | "rumour_spreads";
 
 export interface NewsEffect {
   panic?: number;                 // +N Meter Kepanikan
@@ -63,7 +73,7 @@ export interface NewsEffect {
   calmTargetSector?: boolean;
   lockEvacuationSector?: boolean; // no escort out of that sector next round
   apPenaltyFirstPlayer?: number;
-  stepTowardPosSiaga?: boolean;   // villagers auto-step toward safety
+  stepTowardReadyPost?: boolean;   // villagers auto-step toward safety
   removeCrisisToken?: boolean;
   apBonus?: number;
   drawEvidence?: number;
@@ -77,10 +87,10 @@ export interface NewsCard {
   attachedContent: string;    // description of the attached media
   targetSectorId: SectorId;
   /** FRONT of card ends here. Everything below is printed on the BACK. */
-  truth: "hoax" | "fakta";
+  truth: "hoax" | "fact";
   locks: [EvidenceCategory, EvidenceCategory]; // exactly 2, both must open
   explanation: string;        // 2-3 sentence scientific explanation
-  redFlags: string;           // "tanda bahaya yang seharusnya kalian lihat"
+  redFlags: string;           // "the red flags you should have caught"
   ifIgnored: NewsEffect;
   ifValidated: NewsEffect;
 }
@@ -106,7 +116,7 @@ export interface EvidenceCard {
   bonus?: "refund_ap" | "calm_nearest";
 }
 
-export type DisasterCategory = "tektonik" | "vulkanik" | "oseanografi" | "atmosferik";
+export type DisasterCategory = "tectonic" | "volcanic" | "oceanic" | "atmospheric";
 
 export type RoundEffectKey =
   | "move_penalty"        // +1 AP all movement
@@ -152,7 +162,7 @@ export interface ChaosCard {
 export type RewardEffectKey =
   | "ap_up"
   | "hand_limit_up"
-  | "sea_route_cheap"
+  | "sea_lane_cheap"
   | "clear_chaos"
   | "calm_cheap";
 
@@ -167,18 +177,20 @@ export interface RewardCard {
 // ——— Roles ————————————————————————————————————————————————————————
 
 export type ActiveAbilityKey =
-  | "recon"          // Elang: peek disaster OR news deck
-  | "data_mining"    // Orangutan: discard 2 evidence -> open any lock
-  | "tactical_escort"// Harimau: +1 AP for escort this turn
-  | "network_sync"   // Monyet: see a player's hand, swap 1 card
-  | "suppress";      // Komodo: calm up to 3 on your tile
+  | "recon"          // Bald Eagle: peek disaster OR news deck
+  | "data_mining"    // Japanese Macaque: discard 2 evidence -> open any lock
+  | "tactical_escort"// Sumatran Tiger: +1 AP for escort this turn
+  | "network_sync"   // Kea Parrot: see a player's hand, swap 1 card
+  | "suppress"       // Andean Llama: calm up to 3 AND clear the Crisis Token
+  | "open_water";    // Whale Shark: move a villager along the Sea Lane
 
 export type SubMissionKey =
-  | "map_damaged"      // Elang: end turn on 3 different damaged tiles
-  | "collect_3pt"      // Orangutan: hold three 3-point evidence at once
-  | "rescue_crisis"    // Harimau: evacuate 5 villagers taken from crisis tiles
-  | "catalyst"         // Monyet: 3 barters whose card solved the news same round
-  | "calm_six";        // Komodo: calm 6 panicked villagers total
+  | "critical_mapping" // Bald Eagle: end turn on 3 different damaged tiles
+  | "collect_3pt"      // Japanese Macaque: hold three 3-point evidence at once
+  | "rescue_crisis"    // Sumatran Tiger: evacuate 5 villagers from crisis tiles
+  | "catalyst"         // Kea Parrot: 3 barters whose card solved the news same round
+  | "calm_six"         // Andean Llama: calm 6 panicked villagers total
+  | "safe_passage";    // Whale Shark: deliver 3 villagers via the Sea Lane
 
 export interface Role {
   id: string;
@@ -200,7 +212,7 @@ export interface Role {
 
 export type PlayerId = string;
 
-export type VillagerStatus = "tenang" | "panik" | "selamat" | "hilang";
+export type VillagerStatus = "calm" | "panicked" | "rescued" | "lost";
 
 export interface VillagerToken {
   id: string;
@@ -214,8 +226,9 @@ export type TileDamage = 0 | 1 | 2;
 export interface TileState {
   index: number;
   typeId: string;
-  sectorId: SectorId | null;   // null for Pos Siaga
-  isPosSiaga: boolean;
+  sectorId: SectorId | null;   // null for Ready Post and Sea Lane tiles
+  isReadyPost: boolean;
+  isSeaLane: boolean;
   damage: TileDamage;
   occupants: VillagerToken[];
   hasCrisisToken: boolean;
@@ -246,7 +259,7 @@ export type GamePhase =
   | "p5_impact"
   | "game_over";
 
-export type GameOverReason = "menang" | "panik" | "korban" | "waktu";
+export type GameOverReason = "win" | "panic" | "casualties" | "timeout";
 
 export interface GameLogEntry {
   round: number;
@@ -256,9 +269,9 @@ export interface GameLogEntry {
 }
 
 export interface GameStats {
-  terverifikasi: number;
-  tebakanBeruntung: number;
-  hoaksMenyebar: number;
+  verified: number;
+  luckyGuess: number;
+  rumourSpreads: number;
   hoaxDebunked: number;
   factsValidated: number;
   subMissionsDone: number;
@@ -274,7 +287,6 @@ export interface GameState {
   phase: GamePhase;
   round: number;
   scenarioId: string;
-  difficulty: "siaga" | "awas" | "darurat";
 
   players: Player[];
   currentPlayerIndex: number;
@@ -324,7 +336,8 @@ export interface GameState {
   pendingApBonus: Record<PlayerId, number>;
   panicShield: boolean;
   peek: PeekInfo | null;
-  seaRouteOpen: boolean;
+  /** False while an oceanic disaster shuts the Sea Lane. */
+  seaLaneOpen: boolean;
   rngSeed: number;
 }
 
@@ -332,8 +345,7 @@ export type GameAction =
   | {
       type: "START_GAME";
       scenarioId: string;
-      difficulty: "siaga" | "awas" | "darurat";
-      players: { name: string; roleId: string }[];
+          players: { name: string; roleId: string }[];
       seed?: number;
     }
   // Fase 1
@@ -341,9 +353,9 @@ export type GameAction =
   // Fase 2
   | { type: "DRAW_NEWS" }
   // Fase 3
-  | { type: "MOVE_PLAYER"; playerId: PlayerId; targetTileIndex: number; viaSeaRoute?: boolean }
+  | { type: "MOVE_PLAYER"; playerId: PlayerId; targetTileIndex: number; viaSeaLane?: boolean }
   | { type: "CALM_VILLAGER"; playerId: PlayerId; villagerId: string }
-  | { type: "ESCORT_VILLAGER"; playerId: PlayerId; villagerIds: string[]; targetTileIndex: number; viaSeaRoute?: boolean }
+  | { type: "ESCORT_VILLAGER"; playerId: PlayerId; villagerIds: string[]; targetTileIndex: number; viaSeaLane?: boolean }
   | { type: "INVESTIGATE"; playerId: PlayerId }
   | { type: "PLAY_EVIDENCE_LOCK"; playerId: PlayerId; evidenceId: string; lock: EvidenceCategory }
   | { type: "DISCARD_FOR_RESOURCE"; playerId: PlayerId; evidenceId: string; tradeWithPlayerId?: PlayerId; tradeGiveCardId?: string; targetVillagerId?: string }

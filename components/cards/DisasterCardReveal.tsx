@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { Flame, MapPin, Timer, Zap } from "lucide-react";
 import type { DisasterCard } from "@/engine/types";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { DISASTER_CATEGORY_CLASS } from "@/lib/theme";
 
 export function DisasterCardReveal({

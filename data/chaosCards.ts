@@ -1,8 +1,8 @@
 // ============================================================================
-// RING OF FIRE v2.0 — Kartu Chaos (8 kartu)
-// Ditarik HANYA saat verifikasi gagal (outcome "hoaks_menyebar").
-// Kerugian berlaku sampai akhir permainan atau sampai ditebus dengan Reputasi.
-// Sumber: docs/00-MASTER-SPEC-v2.md §5.4
+// RING OF FIRE v3.0 — Chaos Cards (8)
+// Drawn ONLY when a verification fails (outcome "rumour_spreads").
+// The setback lasts until the end of the game, or until Reputation buys it off.
+// Source: docs/00-MASTER-SPEC-v3.md §4.4
 // ============================================================================
 
 import type { ChaosCard } from "@/engine/types";
@@ -10,61 +10,61 @@ import type { ChaosCard } from "@/engine/types";
 export const chaosCards: ChaosCard[] = [
   {
     id: "chaos_01",
-    title: "Kepercayaan Runtuh",
+    title: "Trust Collapses",
     description:
-      "Satu hoaks yang dibiarkan lolos membuat warga berhenti percaya pada Satwa Penjaga. Sekarang setiap kalimat menenangkan harus diulang dua kali. Biaya Menenangkan +1 AP secara permanen.",
+      "One rumour got through, and now nothing the Guardians say lands the first time. Calming costs 1 extra AP for the rest of the game.",
     effectKey: "calm_cost_up_perm",
   },
   {
     id: "chaos_02",
-    title: "Sumber Diblokir: Peta Ditutup",
+    title: "Source Blocked: Maps Restricted",
     description:
-      "Layanan peta dan citra wilayah tiba-tiba dibatasi \"demi ketertiban\". Kartu Evidence kategori [WHERE] tidak bisa dimainkan selama 2 ronde.",
+      "Mapping and imagery services go dark \"for public order\". [WHERE] Evidence cannot be played for 2 rounds.",
     effectKey: "block_category",
     blockedCategory: "WHERE",
   },
   {
     id: "chaos_03",
-    title: "Sumber Diblokir: Arsip Hilang",
+    title: "Source Blocked: Archive Wiped",
     description:
-      "Arsip berita lama dihapus dari server dan riwayat unggahan dibersihkan. Kartu Evidence kategori [WHEN] tidak bisa dimainkan selama 2 ronde.",
+      "Old news archives vanish from the servers and upload histories are scrubbed. [WHEN] Evidence cannot be played for 2 rounds.",
     effectKey: "block_category",
     blockedCategory: "WHEN",
   },
   {
     id: "chaos_04",
-    title: "Sumber Diblokir: Otoritas Dibungkam",
+    title: "Source Blocked: Authority Drowned Out",
     description:
-      "Kanal resmi kebanjiran akun tiruan sampai warga tidak tahu lagi mana yang asli. Kartu Evidence kategori [HOW] tidak bisa dimainkan selama 2 ronde.",
+      "Official channels are buried under copycat accounts until nobody can tell which one is real. [HOW] Evidence cannot be played for 2 rounds.",
     effectKey: "block_category",
     blockedCategory: "HOW",
   },
   {
     id: "chaos_05",
-    title: "Eksodus Panik",
+    title: "Panic Exodus",
     description:
-      "Kabar palsu menyebar lebih cepat daripada rencana evakuasi. Pada awal tiap ronde, 2 warga bergerak ke ubin bersebelahan secara acak — sering ke arah yang salah.",
+      "The rumour outruns the evacuation plan. At the start of each round, 2 villagers wander to a random neighbouring tile — often the wrong way.",
     effectKey: "villager_drift",
   },
   {
     id: "chaos_06",
-    title: "Kelelahan Relawan",
+    title: "Volunteer Burnout",
     description:
-      "Semalaman meladeni pertanyaan yang seharusnya tidak pernah muncul. Semua pemain kehilangan 1 AP pada tiap ronde berikutnya.",
+      "A whole night spent answering questions that should never have been asked. Every Guardian loses 1 AP each round from now on.",
     effectKey: "ap_down",
   },
   {
     id: "chaos_07",
-    title: "Banjir Informasi",
+    title: "Information Flood",
     description:
-      "Grup keluarga meledak oleh kiriman yang saling bertentangan sampai tidak ada yang bisa disimpan dengan tenang. Batas kartu di tangan berkurang 1 untuk semua pemain.",
+      "The family group chat detonates with contradictory forwards until nothing can be held straight. Every Guardian's hand limit drops by 1.",
     effectKey: "hand_limit_down",
   },
   {
     id: "chaos_08",
-    title: "Kredibilitas Tergerus",
+    title: "Credibility Eroded",
     description:
-      "Sekali salah menuduh berita benar sebagai hoaks, reputasi tim ikut terbawa. Setiap Poin Reputasi yang diperoleh berikutnya dipotong satu sebelum masuk jalur.",
+      "Call one true report a hoax and the team's own standing takes the hit. Every Reputation point earned from now on is docked by one before it lands.",
     effectKey: "reputation_tax",
   },
 ];
@@ -73,7 +73,7 @@ export const chaosCardById: Record<string, ChaosCard> = Object.fromEntries(
   chaosCards.map((c) => [c.id, c])
 );
 
-/** Semua id Kartu Chaos, urutan kanonik. Reducer yang mengocok. */
+/** Every Chaos card id in canonical order. The reducer does the shuffling. */
 export function buildChaosDeck(): string[] {
   return chaosCards.map((c) => c.id);
 }

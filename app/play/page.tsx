@@ -27,7 +27,7 @@ import {
   type MoveOption,
 } from "@/lib/engineBridge";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
 
 import { RingBoard } from "@/components/board/RingBoard";
@@ -129,7 +129,7 @@ export default function PlayPage() {
         playerId: current.id,
         villagerIds: escortIds,
         targetTileIndex: index,
-        viaSeaRoute: move.viaSeaRoute,
+        viaSeaLane: move.viaSeaLane,
       });
       setEscortIds([]);
       setSelectedTile(null);
@@ -144,7 +144,7 @@ export default function PlayPage() {
       type: "MOVE_PLAYER",
       playerId: current.id,
       targetTileIndex: m.index,
-      viaSeaRoute: m.viaSeaRoute,
+      viaSeaLane: m.viaSeaLane,
     });
     setSelectedTile(null);
   };
@@ -339,7 +339,7 @@ export default function PlayPage() {
                     </Button>
                   </div>
 
-                  {state.tiles[current.position]?.isPosSiaga && (
+                  {state.tiles[current.position]?.isReadyPost && (
                     <p className="rounded-xl bg-emerald-50 p-2 text-[11px] font-bold leading-snug text-emerald-800">
                       {id.actions.posSiagaBonus}
                     </p>
@@ -549,7 +549,7 @@ function TurnOrder({
 }
 
 /**
- * Pola privasi "ketuk untuk membuka tangan" — kartu tetap rahasia sampai
+ * Pola privasi "tap to reveal your hand" — kartu tetap rahasia sampai
  * pemiliknya sendiri yang membukanya (Table Talk Protocol).
  */
 function HandSection({

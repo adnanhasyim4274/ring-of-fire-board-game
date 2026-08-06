@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import type { DisasterCard, NewsCard } from "@/engine/types";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * Isi Zona Krisis di tengah cincin: ringkasan Kartu Bencana + Kartu Berita aktif.

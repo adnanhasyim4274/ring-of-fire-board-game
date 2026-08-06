@@ -13,32 +13,21 @@ import {
   Zap,
 } from "lucide-react";
 import { roles } from "@/data/roles";
-import { gameConfig } from "@/data/gameConfig";
-import type { DifficultyId } from "@/data/gameConfig";
 import { Button } from "@/components/ui/Button";
 import { PHASE_ORDER } from "@/components/hud/PhaseIndicator";
 import { OutcomeBanner } from "@/components/cards/OutcomeBanner";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
 import { SECTOR_COLOR } from "@/lib/theme";
-import { CENTRE, RING_RADIUS, VIEWBOX, seaRoutePath, tileHexPoints } from "@/lib/ring";
+import { CENTRE, RING_RADIUS, VIEWBOX, seaLanePath, tileHexPoints } from "@/lib/ring";
 
-const RING_SIZE = 28;
-const POS_SIAGA = [0, 7, 14, 21];
-const SEA_ROUTES: [number, number][] = [
-  [0, 7],
-  [7, 14],
-  [14, 21],
-  [21, 0],
-];
+const RING_SIZE = 24;
+const READY_POSTS = [0, 4, 8, 12, 16, 20];
+const SEA_LANE_ENDPOINTS: [number, number] = [0, 12];
+const SECTOR_ORDER = ["sunda", "philippine", "hokkaido", "cascadia", "andes", "south_pacific"] as const;
+const sectorOf = (i: number) => SECTOR_ORDER[Math.floor(i / 4) % 6];
 
-function sectorOf(i: number) {
-  if (i < 7) return "merah" as const;
-  if (i < 14) return "teal" as const;
-  if (i < 21) return "kuning" as const;
-  return "biru" as const;
-}
 
 export default function HowToPlayPage() {
   const s = id.howTo.sections;
@@ -134,9 +123,9 @@ export default function HowToPlayPage() {
         </ol>
 
         <div className="mt-3 space-y-2">
-          <OutcomeBanner outcome="terverifikasi" />
-          <OutcomeBanner outcome="tebakan_beruntung" />
-          <OutcomeBanner outcome="hoaks_menyebar" />
+          <OutcomeBanner outcome="verified" />
+          <OutcomeBanner outcome="lucky_guess" />
+          <OutcomeBanner outcome="rumour_spreads" />
         </div>
 
         <p className="mt-3 rounded-xl bg-zinc-100 p-2.5 text-[13px] font-bold leading-snug text-zinc-700">
@@ -226,32 +215,6 @@ export default function HowToPlayPage() {
         </ul>
       </Section>
 
-      {/* Kesulitan */}
-      <Section title={s.difficulty.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.difficulty.body}</p>
-        <ul className="mt-2 space-y-1.5">
-          {(Object.keys(gameConfig.difficulties) as DifficultyId[]).map((key) => {
-            const d = gameConfig.difficulties[key];
-            return (
-              <li key={key} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
-                <p className="text-sm font-black">{d.name}</p>
-                <p className="text-[12px] text-zinc-500">{d.blurb}</p>
-                <p className="mt-1 flex flex-wrap gap-x-3 text-[12px] font-bold text-zinc-700">
-                  <span>
-                    {id.setup.difficultyStats.target}: {d.targetEvacuation}
-                  </span>
-                  <span>
-                    {id.setup.difficultyStats.panic}: {d.panicMeterMax}
-                  </span>
-                  <span>
-                    {id.setup.difficultyStats.deck}: {d.disasterDeckSize}
-                  </span>
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      </Section>
 
       {/* Catatan demo */}
       <Section title={s.demo.title}>
@@ -301,10 +264,10 @@ function RingDiagram() {
     <figure className="my-3 overflow-hidden rounded-2xl bg-gradient-to-b from-[#12293b] to-[#07141f] p-2">
       <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="mx-auto w-full max-w-sm" role="img" aria-label={id.board.title}>
         <circle cx={CENTRE} cy={CENTRE} r={RING_RADIUS - 200} fill="#0b2233" stroke="#1d4a63" strokeWidth={3} />
-        {SEA_ROUTES.map(([a, b]) => (
+        {[SEA_LANE_ENDPOINTS].map(([a, b]: [number, number]) => (
           <path
             key={`${a}-${b}`}
-            d={seaRoutePath(a, b, RING_SIZE)}
+            d={seaLanePath(a, b, RING_SIZE)}
             fill="none"
             stroke="#7B4FA8"
             strokeWidth={7}
@@ -316,7 +279,7 @@ function RingDiagram() {
           <g key={i}>
             <polygon
               points={tileHexPoints(i, RING_SIZE)}
-              fill={POS_SIAGA.includes(i) ? "#2B2F38" : SECTOR_COLOR[sectorOf(i)]}
+              fill={READY_POSTS.includes(i) ? "#2B2F38" : SECTOR_COLOR[sectorOf(i)]}
               stroke="#00000055"
               strokeWidth={3}
             />
@@ -324,7 +287,7 @@ function RingDiagram() {
         ))}
       </svg>
       <figcaption className="mt-1 flex flex-wrap justify-center gap-2 text-[10px] font-bold text-sky-100/80">
-        {(["merah", "teal", "kuning", "biru"] as const).map((sid) => (
+        {SECTOR_ORDER.map((sid) => (
           <span key={sid} className="inline-flex items-center gap-1">
             <span
               className="inline-block h-2.5 w-2.5 rounded-sm"

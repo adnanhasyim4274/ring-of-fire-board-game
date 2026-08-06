@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Hourglass } from "lucide-react";
 import { gameConfig } from "@/data/gameConfig";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * Jam pasir 1 menit dari komponen fisik — alat pacing melawan analysis

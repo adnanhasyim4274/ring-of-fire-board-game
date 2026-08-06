@@ -130,3 +130,48 @@ export function sharesSeaRoute(
 ): boolean {
   return seaRoutes.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
 }
+
+// ——— Sea Lane ————————————————————————————————————————————————————————
+// v3: the Sea Lane is 3 real hex tiles on a straight chord between two opposite
+// Ready Posts, cutting through the hole in the middle of the ring.
+
+/**
+ * Centre point of the k-th Sea Lane tile (0-based) on the chord joining the two
+ * endpoint Ready Posts. Evenly spaced, so with 3 tiles the middle one lands
+ * exactly on the board centre.
+ */
+export function seaLaneTileCentre(
+  k: number,
+  count: number,
+  endpointA: number,
+  endpointB: number,
+  ringSize: number
+): Point {
+  const a = tileCentre(endpointA, ringSize);
+  const b = tileCentre(endpointB, ringSize);
+  const t = (k + 1) / (count + 1);
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+}
+
+/** Hex outline for a Sea Lane tile, rotated to sit flat against its neighbours. */
+export function seaLaneHexPoints(
+  k: number,
+  count: number,
+  endpointA: number,
+  endpointB: number,
+  ringSize: number,
+  radius = HEX_RADIUS
+): string {
+  const c = seaLaneTileCentre(k, count, endpointA, endpointB, ringSize);
+  const a = tileCentre(endpointA, ringSize);
+  const b = tileCentre(endpointB, ringSize);
+  const rotation = Math.atan2(b.y - a.y, b.x - a.x);
+  return hexPoints(c, radius, rotation);
+}
+
+/** The straight line the lane runs along, endpoint Ready Post to endpoint. */
+export function seaLanePath(endpointA: number, endpointB: number, ringSize: number): string {
+  const a = tileCentre(endpointA, ringSize);
+  const b = tileCentre(endpointB, ringSize);
+  return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
+}

@@ -1,108 +1,151 @@
 // ============================================================================
-// RING OF FIRE v2.0 — Kartu Peran Satwa Penjaga (5)
-// Pasif (selalu aktif) + Aktif (0 AP, 1x per ronde) + Sub-Misi (+2 Reputasi tim).
-// Sumber: docs/00-MASTER-SPEC-v2.md §4
+// RING OF FIRE v3.0 — The six Wildlife Guardians
+// One animal per real region of the Pacific Ring of Fire.
+// Passive (always on) + Active (0 AP, once per round) + Sub-Mission (+2 team
+// Reputation). Roles are matched by `activeKey`, never by id string.
+// Source: docs/00-MASTER-SPEC-v3.md §1
 // ============================================================================
 
-import type { Role } from "@/engine/types";
+import type { Role, SectorId } from "@/engine/types";
 
-export const roles: Role[] = [
+/**
+ * v3 ties every Guardian to a home region and a board sector.
+ * The ENGINE lane owns `Role`; this local extension carries the two new fields
+ * until they land there.
+ */
+export interface GuardianRole extends Role {
+  /** Real-world region this Guardian speaks for. */
+  region: string;
+  /** The board sector that region maps to. */
+  sectorId: SectorId;
+}
+
+export const roles: GuardianRole[] = [
   {
-    id: "elang",
-    name: "Elang",
-    title: "The Scout",
-    passiveName: "Navigasi Udara",
-    passive:
-      "Kebal penalti gerak dari Kartu Bencana, dan tidak membayar AP ekstra untuk masuk atau keluar ubin Retak maupun Hancur.",
-    activeName: "Reconnaissance",
-    active:
-      "Intip 1 kartu teratas dek Bencana ATAU dek Berita, lalu kembalikan ke atas atau taruh di bawah dek.",
-    activeKey: "recon",
-    subMissionName: "Pemetaan Kritis",
-    subMission:
-      "Akhiri giliranmu di 3 ubin Retak/Hancur yang berbeda sepanjang permainan.",
-    subMissionKey: "map_damaged",
-    subMissionTarget: 3,
-    playstyle:
-      "Mata tim: terbang duluan ke daerah rusak, pulang membawa informasi sebelum orang lain rugi menebak.",
-  },
-  {
-    id: "orangutan",
-    name: "Orangutan",
-    title: "The Scholar",
-    passiveName: "Arsip Berjalan",
-    passive:
-      "Batas kartu di tanganmu 6, sementara pemain lain hanya 4. Kamu adalah perpustakaan berjalan tim.",
-    activeName: "Data Mining",
-    active:
-      "Buang 2 Kartu Evidence apa saja untuk membuka 1 gembok apa pun di Kartu Berita aktif.",
-    activeKey: "data_mining",
-    subMissionName: "Kolektor Epistemologi",
-    subMission: "Pegang 3 Kartu Evidence bernilai 3 poin sekaligus di tanganmu.",
-    subMissionKey: "collect_3pt",
-    subMissionTarget: 3,
-    playstyle:
-      "Penimbun bukti yang sabar: menahan kartu bagus sampai satu ronde bisa dituntaskan sekaligus.",
-  },
-  {
-    id: "harimau",
-    name: "Harimau",
+    id: "sumatran_tiger",
+    name: "Sumatran Tiger",
     title: "The Vanguard",
-    passiveName: "Fisik Superior",
+    region: "Indonesia",
+    sectorId: "sunda",
+    passiveName: "Strong Back",
     passive:
-      "Bisa mengawal 2 Token Warga sekaligus dengan biaya 1 AP, bukan 1 warga per AP.",
+      "Escort up to 2 villagers at once for a single AP, instead of paying 1 AP per villager.",
     activeName: "Tactical Escort",
     active:
-      "Jika kamu mengakhiri gerakan di ubin yang berisi warga, dapatkan +1 AP yang hanya boleh dipakai untuk aksi Evakuasi.",
+      "If you end a move on a tile holding villagers, gain +1 AP that may only be spent on Escort.",
     activeKey: "tactical_escort",
-    subMissionName: "Penyelamat Garis Depan",
+    subMissionName: "Frontline Rescuer",
     subMission:
-      "Evakuasi total 5 warga yang kamu ambil langsung dari ubin ber-Token Krisis.",
+      "Evacuate 5 villagers picked up directly from tiles carrying a Crisis Token.",
     subMissionKey: "rescue_crisis",
     subMissionTarget: 5,
     playstyle:
-      "Tenaga angkut tim: masuk ke ubin paling berbahaya, keluar membawa dua warga sekali jalan.",
+      "The team's lifting power: walk into the ugliest tile on the board and walk out with two people at once.",
   },
   {
-    id: "monyet",
-    name: "Monyet",
-    title: "The Networker",
-    passiveName: "Sinyal Repeater",
+    id: "japanese_macaque",
+    name: "Japanese Macaque",
+    title: "The Scholar",
+    region: "Japan",
+    sectorId: "hokkaido",
+    passiveName: "Walking Archive",
     passive:
-      "Boleh Barter Bukti dengan pemain mana pun tanpa harus berada di ubin yang sama.",
-    activeName: "Sinkronisasi Jaringan",
+      "Your hand limit is 6 cards. Everyone else is capped at 4. You are the team's library.",
+    activeName: "Data Mining",
     active:
-      "Lihat seluruh isi tangan 1 pemain, lalu tukar 1 kartu dengannya.",
-    activeKey: "network_sync",
-    subMissionName: "Katalisator Informasi",
-    subMission:
-      "Lakukan 3 barter yang kartunya langsung dipakai memecahkan Kartu Berita di ronde yang sama.",
-    subMissionKey: "catalyst",
+      "Discard any 2 Evidence cards to open any one lock on the active News Card.",
+    activeKey: "data_mining",
+    subMissionName: "Epistemic Collector",
+    subMission: "Hold three 3-point Evidence cards in your hand at the same time.",
+    subMissionKey: "collect_3pt",
     subMissionTarget: 3,
     playstyle:
-      "Penyambung jaringan: tahu siapa memegang kunci yang hilang, dan mengantarkannya tepat waktu.",
+      "The patient hoarder: sits on good cards until one round can be solved outright instead of guessed at.",
   },
   {
-    id: "komodo",
-    name: "Komodo",
-    title: "The Grounder",
-    passiveName: "Aura Otoritas",
+    id: "bald_eagle",
+    name: "Bald Eagle",
+    title: "The Scout",
+    region: "North America",
+    sectorId: "cascadia",
+    passiveName: "High Altitude",
     passive:
-      "Selama kamu berada di sebuah ubin, Kartu Berita tidak bisa memicu efek \"Otomatis Panik\" di ubin itu.",
-    activeName: "Menekan Histeria",
+      "Immune to movement penalties from Disaster Cards, and you never pay the extra AP to enter a Cracked tile.",
+    activeName: "Recon",
     active:
-      "Ubah hingga 3 Warga Panik di ubinmu menjadi Tenang serentak (biaya normal: 2 AP per 1 warga).",
+      "Peek at the top card of the Disaster deck OR the News deck, then put it back on top or on the bottom.",
+    activeKey: "recon",
+    subMissionName: "Critical Mapping",
+    subMission: "End your turn on 3 different damaged tiles over the course of the game.",
+    subMissionKey: "critical_mapping",
+    subMissionTarget: 3,
+    playstyle:
+      "The team's eyes: flies ahead into the broken ground and comes back with the information that stops everyone else guessing.",
+  },
+  {
+    id: "andean_llama",
+    name: "Andean Llama",
+    title: "The Grounder",
+    region: "The Andes",
+    sectorId: "andes",
+    passiveName: "Steady Herd",
+    passive:
+      "Farmers really do post llamas as flock guardians: one animal that refuses to run keeps the whole herd from bolting. While you stand on a tile, no News Card can trigger an Auto-Panic effect there.",
+    activeName: "Calm the Crowd",
+    active:
+      "Plant yourself and face the noise down. Turn up to 3 Panicked villagers on your tile Calm all at once, and pull the Crisis Token off that tile.",
     activeKey: "suppress",
-    subMissionName: "Peredam Histeria",
-    subMission: "Tenangkan total 6 Warga Panik sepanjang permainan.",
+    subMissionName: "Panic Damper",
+    subMission: "Calm 6 Panicked villagers in total across the game.",
     subMissionKey: "calm_six",
     subMissionTarget: 6,
     playstyle:
-      "Jangkar tim: berdiri di titik terpanas dan menahan kepanikan supaya yang lain sempat berpikir.",
+      "The anchor: the only Guardian who can lift a Crisis Token without winning the verdict, so stand where the crowd is loudest.",
+  },
+  {
+    id: "kea_parrot",
+    name: "Kea Parrot",
+    title: "The Networker",
+    region: "New Zealand",
+    sectorId: "south_pacific",
+    passiveName: "Ground Signal",
+    passive:
+      "Alpine parrots that work in gangs, pick locks for fun and walk off with whatever is not bolted down. Barter Evidence with any player, no matter how far apart your tiles are.",
+    activeName: "Network Sync",
+    active:
+      "Nose through someone's things and take what the team needs. Look at one player's entire hand, then swap one card with them.",
+    activeKey: "network_sync",
+    subMissionName: "Information Catalyst",
+    subMission:
+      "Complete 3 barters where the card you handed over cracks the News Card that same round.",
+    subMissionKey: "catalyst",
+    subMissionTarget: 3,
+    playstyle:
+      "The switchboard: knows who is holding the missing lock and gets it into the right hand before the round closes.",
+  },
+  {
+    id: "whale_shark",
+    name: "Whale Shark",
+    title: "The Navigator",
+    region: "The Philippines",
+    sectorId: "philippine",
+    passiveName: "Open Water",
+    passive:
+      "Sea Lane tiles cost you only 1 AP instead of 2, and you may carry a villager across with you.",
+    activeName: "Deep Current",
+    active:
+      "Move 1 villager from any tile onto an adjacent Sea Lane tile, or from a Sea Lane tile onto an adjacent Ready Post.",
+    activeKey: "open_water",
+    subMissionName: "Safe Passage",
+    subMission: "Bring 3 villagers across the Sea Lane and all the way to safety.",
+    subMissionKey: "safe_passage",
+    subMissionTarget: 3,
+    playstyle:
+      "The shortcut: turns a 12-tile walk around the rim into a three-hex swim — as long as the ocean stays open.",
   },
 ];
 
-export const roleById: Record<string, Role> = Object.fromEntries(
+export const roleById: Record<string, GuardianRole> = Object.fromEntries(
   roles.map((r) => [r.id, r])
 );
 

@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import type { EvidenceCategory, NewsCard } from "@/engine/types";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON, NEWS_CATEGORY_CLASS } from "@/lib/theme";
 
 /**
@@ -270,7 +270,7 @@ function describeEffect(card: NewsCard, which: "validated" | "ignored"): string 
   if (e.calmTargetSector) parts.push(id.newsEffect.calmTargetSector);
   if (e.lockEvacuationSector) parts.push(id.newsEffect.lockEvacuationSector);
   if (e.apPenaltyFirstPlayer) parts.push(`${id.newsEffect.apPenalty} −${e.apPenaltyFirstPlayer}`);
-  if (e.stepTowardPosSiaga) parts.push(id.newsEffect.stepTowardPosSiaga);
+  if (e.stepTowardReadyPost) parts.push(id.newsEffect.stepTowardReadyPost);
   if (e.removeCrisisToken) parts.push(id.newsEffect.removeCrisisToken);
   if (e.apBonus) parts.push(`${id.newsEffect.apBonus} +${e.apBonus}`);
   if (e.drawEvidence) parts.push(`${id.newsEffect.drawEvidence} +${e.drawEvidence}`);

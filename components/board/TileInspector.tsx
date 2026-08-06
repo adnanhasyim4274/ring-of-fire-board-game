@@ -5,7 +5,7 @@ import type { MoveOption } from "@/lib/engineBridge";
 import { Button } from "@/components/ui/Button";
 import { VillagerToken } from "@/components/board/VillagerToken";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { SECTOR_COLOR } from "@/lib/theme";
 
 /**
@@ -42,7 +42,7 @@ export function TileInspector({
 }) {
   const sectorName =
     scenario.sectors.find((s) => s.id === tile.sectorId)?.name ??
-    (tile.isPosSiaga ? id.board.posSiaga : "");
+    (tile.isReadyPost ? id.board.posSiaga : "");
   const here = tile.index === current.position;
   const hancur = tile.damage === 2;
 
@@ -79,7 +79,7 @@ export function TileInspector({
         )}
       </header>
 
-      {tile.isPosSiaga && (
+      {tile.isReadyPost && (
         <p className="rounded-lg bg-emerald-50 p-2 text-[11px] font-bold leading-snug text-emerald-800">
           {id.board.posSiagaHint}
         </p>
@@ -105,17 +105,17 @@ export function TileInspector({
       {/* Pindah ke sini */}
       {move && canAct && (
         <Button
-          variant={move.viaSeaRoute ? "secondary" : "safe"}
+          variant={move.viaSeaLane ? "secondary" : "safe"}
           className="w-full text-sm"
           disabled={!move.affordable}
           onClick={() => onMove(move)}
         >
-          {move.viaSeaRoute ? (
+          {move.viaSeaLane ? (
             <Ship className="mr-1.5 inline h-4 w-4" />
           ) : (
             <Footprints className="mr-1.5 inline h-4 w-4" />
           )}
-          {move.viaSeaRoute ? id.actions.moveVia : id.actions.move} ({move.cost} {id.common.ap})
+          {move.viaSeaLane ? id.actions.moveVia : id.actions.move} ({move.cost} {id.common.ap})
         </Button>
       )}
       {hancur && (
@@ -139,11 +139,11 @@ export function TileInspector({
               >
                 <VillagerToken villager={v} />
                 <span className="text-[11px] font-bold text-zinc-600">
-                  {v.status === "panik" ? id.board.panicked : id.board.calm}
+                  {v.status === "panicked" ? id.board.panicked : id.board.calm}
                 </span>
                 {here && canAct && (
                   <span className="ml-auto flex gap-1.5">
-                    {v.status === "panik" ? (
+                    {v.status === "panicked" ? (
                       <Button
                         className="px-2.5 text-xs"
                         disabled={current.ap < calmCost}

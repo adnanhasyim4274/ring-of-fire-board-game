@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Dialog konfirmasi untuk aksi yang tidak bisa dibatalkan. */
 export function ConfirmDialog({

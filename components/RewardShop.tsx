@@ -5,7 +5,7 @@ import type { GameAction, GameState } from "@/engine/types";
 import { rewardCards } from "@/data/rewardCards";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** FASE 5 — belanja Poin Reputasi jadi peningkatan permanen untuk seluruh tim. */
 export function RewardShop({

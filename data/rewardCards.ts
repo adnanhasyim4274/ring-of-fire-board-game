@@ -1,8 +1,8 @@
 // ============================================================================
-// RING OF FIRE v2.0 — Kartu Reward / Upgrade (10 kartu)
-// Dibeli dengan Poin Reputasi di Fase 5. Reputasi didapat dari verifikasi
-// yang benar DAN lengkap — tebakan beruntung tidak menghasilkan apa-apa.
-// Sumber: docs/00-MASTER-SPEC-v2.md §5.5
+// RING OF FIRE v3.0 — Reward / Upgrade Cards (10)
+// Bought with Reputation in Phase 5. Reputation only comes from verifications
+// that are correct AND fully locked — a lucky guess earns nothing.
+// Source: docs/00-MASTER-SPEC-v3.md §4.5
 // ============================================================================
 
 import type { RewardCard } from "@/engine/types";
@@ -10,50 +10,50 @@ import type { RewardCard } from "@/engine/types";
 export const rewardCards: RewardCard[] = [
   {
     id: "rew_peta_evakuasi",
-    title: "Peta Evakuasi",
+    title: "Evacuation Chart",
     cost: 2,
     description:
-      "Jalur laut akhirnya dipetakan dan diberi pelampung penanda. Rute Laut hanya memerlukan 1 AP, bukan 2.",
-    effectKey: "sea_route_cheap",
+      "The crossing is finally charted and buoyed. Sea Lane tiles cost 1 AP instead of 2.",
+    effectKey: "sea_lane_cheap",
   },
   {
     id: "rew_pengeras_suara_desa",
-    title: "Pengeras Suara Desa",
+    title: "Village Loudspeaker",
     cost: 2,
     description:
-      "Satu corong di balai desa mengalahkan seratus pesan berantai. Biaya Menenangkan turun 1 AP.",
+      "One horn on the village hall beats a hundred forwarded messages. Calming costs 1 less AP.",
     effectKey: "calm_cheap",
   },
   {
     id: "rew_radio_komunitas",
-    title: "Radio Komunitas",
+    title: "Community Radio",
     cost: 3,
     description:
-      "Frekuensi milik warga sendiri, disiarkan dari posko, tanpa perantara. Semua pemain mendapat +1 AP permanen.",
+      "A frequency the community owns, broadcast from the post itself, with nobody in between. Every Guardian gains +1 AP permanently.",
     effectKey: "ap_up",
   },
   {
     id: "rew_dermaga_darurat",
-    title: "Dermaga Darurat",
+    title: "Emergency Jetty",
     cost: 3,
     description:
-      "Ponton dan tangga besi dipasang di kedua Pos Siaga. Rute Laut hanya memerlukan 1 AP.",
-    effectKey: "sea_route_cheap",
+      "Pontoons and steel ladders go in at both ends of the crossing. Sea Lane tiles cost 1 AP.",
+    effectKey: "sea_lane_cheap",
   },
   {
     id: "rew_pusat_data_warga",
-    title: "Pusat Data Warga",
+    title: "Community Data Centre",
     cost: 3,
     description:
-      "Satu papan tulis besar berisi semua yang sudah diverifikasi, terbuka untuk siapa saja. Batas kartu di tangan +2.",
+      "One big board listing everything already verified, readable by anyone who walks past. Hand limit +2.",
     effectKey: "hand_limit_up",
   },
   {
     id: "rew_jaringan_relawan",
-    title: "Jaringan Relawan",
+    title: "Volunteer Network",
     cost: 4,
     description:
-      "Puluhan tangan tambahan ikut menyimpan dan mengedarkan bukti. Batas kartu di tangan +2 untuk semua pemain.",
+      "Dozens of extra hands to hold and circulate evidence. Hand limit +2 for every Guardian.",
     effectKey: "hand_limit_up",
   },
   {
@@ -66,26 +66,26 @@ export const rewardCards: RewardCard[] = [
   },
   {
     id: "rew_kampanye_klarifikasi",
-    title: "Kampanye Klarifikasi",
+    title: "Clarification Campaign",
     cost: 4,
     description:
-      "Bantahan yang sabar, berulang, dan mudah dibagikan akhirnya menyusul hoaksnya. Tebus dan buang 1 Kartu Chaos yang sedang berlaku.",
+      "A patient, repeatable, shareable correction finally overtakes the rumour. Buy off and discard 1 active Chaos card.",
     effectKey: "clear_chaos",
   },
   {
     id: "rew_klinik_lapangan",
-    title: "Klinik Lapangan",
+    title: "Field Clinic",
     cost: 5,
     description:
-      "Tenda medis di simpul evakuasi memulihkan tenaga sekaligus kepercayaan. Tebus dan buang 1 Kartu Chaos yang sedang berlaku.",
+      "A medical tent at the evacuation node restores both strength and trust. Buy off and discard 1 active Chaos card.",
     effectKey: "clear_chaos",
   },
   {
     id: "rew_drone_pemantau",
-    title: "Drone Pemantau",
+    title: "Survey Drone",
     cost: 5,
     description:
-      "Mata di udara mengirim citra jalur setiap sepuluh menit, jadi tak ada lagi langkah yang ditebak. Semua pemain mendapat +1 AP permanen.",
+      "An eye overhead sends route imagery every ten minutes, so nobody has to guess their next step. Every Guardian gains +1 AP permanently.",
     effectKey: "ap_up",
   },
 ];

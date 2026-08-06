@@ -4,7 +4,7 @@ import { Sparkles, Target, Zap } from "lucide-react";
 import type { Player, Role } from "@/engine/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
 
 /** Kartu Peran: Pasif selalu aktif, Aktif 1x per ronde, Sub-Misi pribadi. */

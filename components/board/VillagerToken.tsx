@@ -1,6 +1,6 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import type { VillagerToken as VillagerTokenType } from "@/engine/types";
 
 /**
@@ -17,7 +17,7 @@ export function VillagerToken({
   villager: VillagerTokenType;
   size?: "sm" | "md";
 }) {
-  const panicked = villager.status === "panik";
+  const panicked = villager.status === "panicked";
   const label = panicked ? id.board.panicked : id.board.calm;
   return (
     <span
@@ -44,8 +44,8 @@ export function VillagerTally({
   villagers: VillagerTokenType[];
   className?: string;
 }) {
-  const calm = villagers.filter((v) => v.status === "tenang").length;
-  const panicked = villagers.filter((v) => v.status === "panik").length;
+  const calm = villagers.filter((v) => v.status === "calm").length;
+  const panicked = villagers.filter((v) => v.status === "panicked").length;
   if (calm + panicked === 0) return null;
   return (
     <span className={cn("inline-flex items-center gap-2 text-xs font-bold", className)}>

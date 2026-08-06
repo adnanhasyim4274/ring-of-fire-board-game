@@ -6,7 +6,7 @@ import { evidenceCardById } from "@/data/evidenceCards";
 import { roleById } from "@/data/roles";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON } from "@/lib/theme";
 
 /**

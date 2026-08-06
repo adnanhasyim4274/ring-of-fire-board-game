@@ -6,7 +6,7 @@ import { newsCards } from "@/data/newsCards";
 import { disasterCards } from "@/data/disasterCards";
 import { gameConfig } from "@/data/gameConfig";
 import { PHASE_ORDER } from "@/components/hud/PhaseIndicator";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Panel playtest tersembunyi — hanya dirender saat NEXT_PUBLIC_DEBUG=1. */
 export function DebugPanel({ dispatch }: { dispatch: (a: GameAction) => void }) {

@@ -8,7 +8,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { DisasterCardReveal } from "@/components/cards/DisasterCardReveal";
 import { NewsCardDisplay } from "@/components/cards/NewsCardDisplay";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON } from "@/lib/theme";
 
 /** Hasil kemampuan intip (Elang: Reconnaissance, Monyet: Sinkronisasi Jaringan). */

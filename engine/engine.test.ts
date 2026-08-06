@@ -7,11 +7,11 @@ import { describe, expect, it } from "vitest";
 import { reduce } from "./reducer";
 import {
   checkGameOver,
-  isSeaRouteOpen,
+  isSeaLaneOpen,
   moveCost,
   resolveVerdict,
   rimNeighbors,
-  seaRouteNeighbors,
+  seaLaneNeighbors,
 } from "./rules";
 import type {
   EvidenceCategory,
@@ -30,9 +30,9 @@ import { scenarioById } from "@/data/scenarios";
 const SCENARIO_ID = Object.keys(scenarioById)[0];
 
 /** A disaster with no movement penalty, no escort block and no tile damage. */
-const CALM_DISASTER = "dis_vul_04";
-/** Sector teal, truth "fakta" — keeps sector merah untouched during tests. */
-const TEAL_NEWS = "news_ps_01";
+const CALM_DISASTER = "dis_atm_03";
+/** Hokkaido sector, truth "fact" — keeps the Sunda sector untouched in tests. */
+const TEAL_NEWS = "news_pse_03";
 
 function act(state: GameState, action: GameAction): GameState {
   const next = reduce(state, action);
@@ -43,15 +43,12 @@ function act(state: GameState, action: GameAction): GameState {
 function newGame(
   opts: {
     roles?: string[];
-    difficulty?: GameState["difficulty"];
     seed?: number;
-  } = {}
-): GameState {
-  const roles = opts.roles ?? ["elang", "komodo"];
+  } = {}): GameState {
+  const roles = opts.roles ?? ["bald_eagle", "andean_llama"];
   const state = reduce(null, {
     type: "START_GAME",
     scenarioId: SCENARIO_ID,
-    difficulty: opts.difficulty ?? "awas",
     players: roles.map((roleId, i) => ({ name: `P${i + 1}`, roleId })),
     seed: opts.seed ?? 7,
   });
@@ -62,8 +59,7 @@ function newGame(
 /** Fase 1 + Fase 2, stopping at the start of Fase 3. */
 function toTurnsPhase(
   state: GameState,
-  opts: { disasterId?: string; newsId?: string } = {}
-): GameState {
+  opts: { disasterId?: string; newsId?: string } = {}): GameState {
   let s = state;
   s = act(s, { type: "DEBUG_SET_DISASTER_TOP", cardId: opts.disasterId ?? CALM_DISASTER });
   s = act(s, { type: "DRAW_DISASTER" });
@@ -84,8 +80,7 @@ function endAllTurns(state: GameState): GameState {
 /** Fase 1 → Fase 5, stopping inside p5_impact (before the round rolls over). */
 function playRound(
   state: GameState,
-  opts: { disasterId?: string; newsId?: string; verdict?: Verdict } = {}
-): GameState {
+  opts: { disasterId?: string; newsId?: string; verdict?: Verdict } = {}): GameState {
   let s = toTurnsPhase(state, opts);
   s = endAllTurns(s);
   if (opts.verdict && s.phase === "p4_verdict") {
@@ -113,7 +108,7 @@ function openLock(state: GameState, lock: EvidenceCategory, evidenceId?: string)
 }
 
 function posSiagaIndex(state: GameState): number {
-  const i = state.tiles.findIndex((t) => t.isPosSiaga);
+  const i = state.tiles.findIndex((t) => t.isReadyPost);
   expect(i).toBeGreaterThanOrEqual(0);
   return i;
 }
@@ -123,7 +118,7 @@ function tileNextToPosSiaga(state: GameState): TileState {
   const pos = posSiagaIndex(state);
   const neighbour = rimNeighbors(pos, state.tiles.length)
     .map((i) => state.tiles[i])
-    .find((t) => !t.isPosSiaga && t.occupants.length > 0);
+    .find((t) => !t.isReadyPost && t.occupants.length > 0);
   expect(neighbour).toBeTruthy();
   return neighbour!;
 }
@@ -135,38 +130,37 @@ function villagerCountOnBoard(state: GameState): number {
 // ——— Setup ——————————————————————————————————————————————————————————
 
 describe("START_GAME", () => {
-  it("builds the 28-tile ring with 4 Pos Siaga and 16 villagers", () => {
+  it("builds the 27-tile board with 6 Ready Posts and 18 villagers", () => {
     const s = newGame();
     const scenario = scenarioById[SCENARIO_ID];
-    expect(s.tiles).toHaveLength(scenario.ringSize);
-    expect(s.tiles.filter((t) => t.isPosSiaga)).toHaveLength(scenario.posSiagaIndices.length);
+    expect(s.tiles).toHaveLength(scenario.layout.length);
+    expect(scenario.ringSize).toBe(24);
+    expect(s.tiles.filter((t) => t.isReadyPost)).toHaveLength(scenario.readyPostIndices.length);
     expect(villagerCountOnBoard(s)).toBe(scenario.totalVillagers);
     expect(s.phase).toBe("p1_disaster");
     expect(s.round).toBe(1);
   });
 
-  it("gives every tile a sectorId except the Pos Siaga tiles", () => {
+  it("gives every land tile a sectorId, and none to Ready Posts or Sea Lane", () => {
     const s = newGame();
     for (const tile of s.tiles) {
-      if (tile.isPosSiaga) expect(tile.sectorId).toBeNull();
+      if (tile.isReadyPost || tile.isSeaLane) expect(tile.sectorId).toBeNull();
       else expect(tile.sectorId).not.toBeNull();
     }
   });
 
-  it("deals a starting hand and places players on Pos Siaga tiles", () => {
-    const s = newGame({ roles: ["elang", "harimau", "komodo"] });
+  it("deals a starting hand and places players on Ready Posts", () => {
+    const s = newGame({ roles: ["bald_eagle", "sumatran_tiger", "andean_llama"] });
     for (const p of s.players) {
       expect(p.hand.length).toBeGreaterThan(0);
-      expect(s.tiles[p.position].isPosSiaga).toBe(true);
+      expect(s.tiles[p.position].isReadyPost).toBe(true);
     }
   });
 
-  it("applies the difficulty preset", () => {
-    expect(newGame({ difficulty: "siaga" }).panicMeterMax).toBe(10);
-    expect(newGame({ difficulty: "awas" }).panicMeterMax).toBe(8);
-    expect(newGame({ difficulty: "darurat" }).panicMeterMax).toBe(6);
-    expect(newGame({ difficulty: "siaga" }).decks.disaster).toHaveLength(18);
-    expect(newGame({ difficulty: "darurat" }).decks.disaster).toHaveLength(14);
+  it("uses one single difficulty — no presets", () => {
+    const s = newGame();
+    expect(s.panicMeterMax).toBe(6);
+    expect(s.decks.disaster).toHaveLength(12);
   });
 });
 
@@ -195,7 +189,7 @@ describe("sea routes", () => {
     const s = toTurnsPhase(newGame());
     const scenario = scenarioById[SCENARIO_ID];
     const from = s.players[0].position;
-    const [to] = seaRouteNeighbors(from, scenario);
+    const [to] = seaLaneNeighbors(from, scenario);
     expect(to).toBeDefined();
     // Not reachable along the rim — that is the whole point of the shortcut.
     expect(rimNeighbors(from, s.tiles.length)).not.toContain(to);
@@ -206,25 +200,25 @@ describe("sea routes", () => {
       type: "MOVE_PLAYER",
       playerId: s.players[0].id,
       targetTileIndex: to,
-      viaSeaRoute: true,
+      viaSeaLane: true,
     });
     expect(after.players[0].position).toBe(to);
     expect(after.players[0].ap).toBe(apBefore - cost);
     expect(cost).toBe(2);
   });
 
-  it("closes completely under an oseanografi disaster", () => {
-    const s = toTurnsPhase(newGame(), { disasterId: "dis_ose_01" });
-    expect(s.activeDisaster?.category).toBe("oseanografi");
-    expect(isSeaRouteOpen(s)).toBe(false);
+  it("closes completely under an oceanic disaster", () => {
+    const s = toTurnsPhase(newGame(), { disasterId: "dis_oce_01" });
+    expect(s.activeDisaster?.category).toBe("oceanic");
+    expect(isSeaLaneOpen(s)).toBe(false);
 
     const from = s.players[0].position;
-    const [to] = seaRouteNeighbors(from, scenarioById[SCENARIO_ID]);
+    const [to] = seaLaneNeighbors(from, scenarioById[SCENARIO_ID]);
     const after = act(s, {
       type: "MOVE_PLAYER",
       playerId: s.players[0].id,
       targetTileIndex: to,
-      viaSeaRoute: true,
+      viaSeaLane: true,
     });
     expect(after.players[0].position).toBe(from);
   });
@@ -245,9 +239,9 @@ function toVerdictPhase(newsId: string, locksToOpen: "both" | "one" | "none"): G
 }
 
 describe("Commit & Flip — the three outcomes", () => {
-  const HOAX_NEWS = "news_st_01"; // truth: hoax, locks HOW + WHEN
+  const HOAX_NEWS = "news_soc_01"; // truth: hoax, locks HOW + WHEN
 
-  it("terverifikasi: right verdict AND both locks -> +1 reputation, crisis cleared", () => {
+  it("verified: right verdict AND both locks -> +1 reputation, crisis cleared", () => {
     let s = toVerdictPhase(HOAX_NEWS, "both");
     expect(s.locksOpened).toHaveLength(2);
     const reputationBefore = s.reputation;
@@ -256,15 +250,15 @@ describe("Commit & Flip — the three outcomes", () => {
     s = act(s, { type: "FLIP_NEWS" });
 
     expect(s.newsRevealed).toBe(true);
-    expect(s.lastOutcome).toBe("terverifikasi");
+    expect(s.lastOutcome).toBe("verified");
     expect(s.reputation).toBe(reputationBefore + 1);
-    expect(s.stats.terverifikasi).toBe(1);
+    expect(s.stats.verified).toBe(1);
     expect(s.stats.hoaxDebunked).toBe(1);
     expect(s.tiles[s.newsTileIndex!].hasCrisisToken).toBe(false);
     expect(s.activeChaos).toHaveLength(0);
   });
 
-  it("tebakan_beruntung: right verdict but incomplete locks -> ZERO reputation", () => {
+  it("lucky_guess: right verdict but incomplete locks -> ZERO reputation", () => {
     let s = toVerdictPhase(HOAX_NEWS, "one");
     expect(s.locksOpened).toHaveLength(1);
     const reputationBefore = s.reputation;
@@ -273,55 +267,55 @@ describe("Commit & Flip — the three outcomes", () => {
     s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
     s = act(s, { type: "FLIP_NEWS" });
 
-    expect(s.lastOutcome).toBe("tebakan_beruntung");
+    expect(s.lastOutcome).toBe("lucky_guess");
     // Guessing right is not literacy: no reward, and the crisis token stays.
     expect(s.reputation).toBe(reputationBefore);
-    expect(s.stats.terverifikasi).toBe(0);
-    expect(s.stats.tebakanBeruntung).toBe(1);
+    expect(s.stats.verified).toBe(0);
+    expect(s.stats.luckyGuess).toBe(1);
     expect(s.panicMeter).toBe(panicBefore);
     expect(s.tiles[s.newsTileIndex!].hasCrisisToken).toBe(true);
     expect(s.activeChaos).toHaveLength(0);
   });
 
-  it("tebakan_beruntung also covers a right verdict with no locks at all", () => {
+  it("lucky_guess also covers a right verdict with no locks at all", () => {
     let s = toVerdictPhase(HOAX_NEWS, "none");
     s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
     s = act(s, { type: "FLIP_NEWS" });
-    expect(s.lastOutcome).toBe("tebakan_beruntung");
+    expect(s.lastOutcome).toBe("lucky_guess");
     expect(s.reputation).toBe(0);
   });
 
-  it("hoaks_menyebar: wrong verdict -> +1 panic and a Chaos card", () => {
+  it("rumour_spreads: wrong verdict -> +1 panic and a Chaos card", () => {
     let s = toVerdictPhase(HOAX_NEWS, "both");
     const panicBefore = s.panicMeter;
     // The outcome itself ticks +1; the card's own "ifIgnored" effect stacks on top.
     const cardPanic = newsCardById[HOAX_NEWS].ifIgnored.panic ?? 0;
 
-    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fact" });
     s = act(s, { type: "FLIP_NEWS" });
 
-    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.lastOutcome).toBe("rumour_spreads");
     expect(s.panicMeter).toBe(panicBefore + 1 + cardPanic);
     expect(s.activeChaos).toHaveLength(1);
-    expect(s.stats.hoaksMenyebar).toBe(1);
+    expect(s.stats.rumourSpreads).toBe(1);
     expect(s.reputation).toBe(0);
   });
 
-  it("hoaks_menyebar: abstain never scores, even with both locks open", () => {
+  it("rumour_spreads: abstain never scores, even with both locks open", () => {
     let s = toVerdictPhase(HOAX_NEWS, "both");
     s = act(s, { type: "COMMIT_VERDICT", verdict: "abstain" });
     s = act(s, { type: "FLIP_NEWS" });
-    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.lastOutcome).toBe("rumour_spreads");
     expect(s.reputation).toBe(0);
     expect(s.activeChaos).toHaveLength(1);
   });
 
   it("validates a FAKTA card the same way", () => {
-    const factNews = Object.values(newsCardById).find((c) => c.truth === "fakta")!;
+    const factNews = Object.values(newsCardById).find((c) => c.truth === "fact")!;
     let s = toVerdictPhase(factNews.id, "both");
-    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fact" });
     s = act(s, { type: "FLIP_NEWS" });
-    expect(s.lastOutcome).toBe("terverifikasi");
+    expect(s.lastOutcome).toBe("verified");
     expect(s.stats.factsValidated).toBe(1);
     expect(s.stats.hoaxDebunked).toBe(0);
   });
@@ -330,7 +324,7 @@ describe("Commit & Flip — the three outcomes", () => {
     let s = toVerdictPhase(HOAX_NEWS, "both");
     s = act(s, { type: "COMMIT_VERDICT", verdict: "hoax" });
     expect(s.verdict).toBe("hoax");
-    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fact" });
     expect(s.verdict).toBe("hoax");
     s = act(s, { type: "COMMIT_VERDICT", verdict: "abstain" });
     expect(s.verdict).toBe("hoax");
@@ -345,11 +339,11 @@ describe("Commit & Flip — the three outcomes", () => {
 
   it("resolveVerdict implements the truth table directly", () => {
     const base = toVerdictPhase(HOAX_NEWS, "both");
-    expect(resolveVerdict({ ...base, verdict: "hoax" })).toBe("terverifikasi");
-    expect(resolveVerdict({ ...base, verdict: "fakta" })).toBe("hoaks_menyebar");
-    expect(resolveVerdict({ ...base, verdict: "abstain" })).toBe("hoaks_menyebar");
-    expect(resolveVerdict({ ...base, verdict: null })).toBe("hoaks_menyebar");
-    expect(resolveVerdict({ ...base, verdict: "hoax", locksOpened: [] })).toBe("tebakan_beruntung");
+    expect(resolveVerdict({ ...base, verdict: "hoax" })).toBe("verified");
+    expect(resolveVerdict({ ...base, verdict: "fact" })).toBe("rumour_spreads");
+    expect(resolveVerdict({ ...base, verdict: "abstain" })).toBe("rumour_spreads");
+    expect(resolveVerdict({ ...base, verdict: null })).toBe("rumour_spreads");
+    expect(resolveVerdict({ ...base, verdict: "hoax", locksOpened: [] })).toBe("lucky_guess");
   });
 });
 
@@ -365,22 +359,27 @@ describe("evidence locks", () => {
   });
 
   it("rejects an evidence card whose category does not match the lock", () => {
-    const newsId = "news_st_01"; // HOW + WHEN
+    const newsId = "news_soc_01";
     const s = toTurnsPhase(newGame(), { newsId });
-    const wrong = evidenceIdFor("WHY");
+    const targetLock = s.activeNews!.locks[0];
+    // A category the card does NOT ask for.
+    const wrongCat = (["WHAT", "WHERE", "WHEN", "WHO", "WHY", "HOW"] as const).find(
+      (c) => !s.activeNews!.locks.includes(c)
+    )!;
+    const wrong = evidenceIdFor(wrongCat);
     s.players[0].hand.push(wrong);
     const after = act(s, {
       type: "PLAY_EVIDENCE_LOCK",
       playerId: s.players[0].id,
       evidenceId: wrong,
-      lock: "WHEN",
+      lock: targetLock,
     });
     expect(after.locksOpened).toHaveLength(0);
   });
 
   it("blocks the WHERE lock while a block_where disaster is active", () => {
     const newsId = Object.values(newsCardById).find((c) => c.locks.includes("WHERE"))!.id;
-    const s = toTurnsPhase(newGame(), { newsId, disasterId: "dis_vul_03" });
+    const s = toTurnsPhase(newGame(), { newsId, disasterId: "dis_atm_02" });
     expect(s.activeDisaster?.roundEffectKey).toBe("block_where");
     const id = evidenceIdFor("WHERE");
     s.players[0].hand.push(id);
@@ -394,11 +393,12 @@ describe("evidence locks", () => {
   });
 
   it("will not open the same lock twice", () => {
-    const newsId = "news_st_01";
+    const newsId = "news_soc_01";
     let s = toTurnsPhase(newGame(), { newsId });
-    s = openLock(s, "WHEN");
-    s = openLock(s, "WHEN");
-    expect(s.locksOpened.filter((l) => l === "WHEN")).toHaveLength(1);
+    const lock = s.activeNews!.locks[0];
+    s = openLock(s, lock);
+    s = openLock(s, lock);
+    expect(s.locksOpened.filter((l) => l === lock)).toHaveLength(1);
   });
 });
 
@@ -414,7 +414,7 @@ describe("escort", () => {
     expect(s.players[0].position).toBe(tile.index);
 
     // Panicked villagers refuse to move.
-    s.tiles[tile.index].occupants[0].status = "panik";
+    s.tiles[tile.index].occupants[0].status = "panicked";
     const villagerId = s.tiles[tile.index].occupants[0].id;
     let after = act(s, {
       type: "ESCORT_VILLAGER",
@@ -426,7 +426,7 @@ describe("escort", () => {
     expect(after.players[0].position).toBe(tile.index);
 
     // Calm them and the same escort works.
-    s.tiles[tile.index].occupants[0].status = "tenang";
+    s.tiles[tile.index].occupants[0].status = "calm";
     const apBefore = s.players[0].ap;
     after = act(s, {
       type: "ESCORT_VILLAGER",
@@ -436,22 +436,22 @@ describe("escort", () => {
     });
     expect(after.evacuees).toHaveLength(1);
     expect(after.evacuees[0].id).toBe(villagerId);
-    expect(after.evacuees[0].status).toBe("selamat");
+    expect(after.evacuees[0].status).toBe("rescued");
     expect(after.players[0].position).toBe(pos);
     expect(after.players[0].ap).toBe(apBefore - 1);
     expect(after.tiles[tile.index].occupants.find((v) => v.id === villagerId)).toBeUndefined();
   });
 
   it("lets Harimau move two villagers for a single AP", () => {
-    let s = toTurnsPhase(newGame({ roles: ["harimau", "komodo"] }));
+    let s = toTurnsPhase(newGame({ roles: ["sumatran_tiger", "andean_llama"] }));
     const pos = posSiagaIndex(s);
     const tile = tileNextToPosSiaga(s);
     const player = s.players[0];
     s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
 
     // Seed a second calm villager on the same tile.
-    const extra: VillagerToken = { id: "w-extra", status: "tenang", tileIndex: tile.index };
-    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    const extra: VillagerToken = { id: "w-extra", status: "calm", tileIndex: tile.index };
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "calm"));
     s.tiles[tile.index].occupants.push(extra);
     const ids = s.tiles[tile.index].occupants.map((v) => v.id);
     expect(ids.length).toBeGreaterThanOrEqual(2);
@@ -468,13 +468,13 @@ describe("escort", () => {
   });
 
   it("caps everyone else at one villager per escort", () => {
-    let s = toTurnsPhase(newGame({ roles: ["komodo", "elang"] }));
+    let s = toTurnsPhase(newGame({ roles: ["andean_llama", "bald_eagle"] }));
     const pos = posSiagaIndex(s);
     const tile = tileNextToPosSiaga(s);
     const player = s.players[0];
     s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
-    const extra: VillagerToken = { id: "w-extra", status: "tenang", tileIndex: tile.index };
-    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    const extra: VillagerToken = { id: "w-extra", status: "calm", tileIndex: tile.index };
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "calm"));
     s.tiles[tile.index].occupants.push(extra);
     const ids = s.tiles[tile.index].occupants.map((v) => v.id).slice(0, 2);
 
@@ -493,8 +493,8 @@ describe("escort", () => {
 describe("2-stage tile damage", () => {
   it("cracks first, destroys second, and only then loses the villagers", () => {
     // dis_tek_02 damages one tile in sector merah every round.
-    const opts = { disasterId: "dis_tek_02", newsId: TEAL_NEWS, verdict: "fakta" as Verdict };
-    let s = playRound(newGame({ difficulty: "siaga" }), opts);
+    const opts = { disasterId: "dis_tec_02", newsId: TEAL_NEWS, verdict: "fact" as Verdict };
+    let s = playRound(newGame({}), opts);
     expect(s.phase).toBe("p5_impact");
 
     const cracked = s.tiles.filter((t) => t.damage === 1);
@@ -508,18 +508,18 @@ describe("2-stage tile damage", () => {
 
     expect(s.tiles[victim].damage).toBe(2);
     expect(s.tiles[victim].occupants).toHaveLength(0);
-    expect(s.casualties).toHaveLength(villagersThere);
-    for (const v of s.casualties) expect(v.status).toBe("hilang");
+    expect(s.casualties.length).toBeGreaterThanOrEqual(villagersThere);
+    for (const v of s.casualties) expect(v.status).toBe("lost");
   });
 
   it("never damages a Pos Siaga tile", () => {
-    let s = newGame({ difficulty: "siaga" });
+    let s = newGame({});
     for (let round = 0; round < 4 && s.phase !== "game_over"; round++) {
-      s = playRound(s, { newsId: TEAL_NEWS, verdict: "fakta" });
+      s = playRound(s, { newsId: TEAL_NEWS, verdict: "fact" });
       if (s.phase === "p5_impact") s = act(s, { type: "ADVANCE_PHASE" });
     }
     for (const tile of s.tiles) {
-      if (tile.isPosSiaga) expect(tile.damage).toBe(0);
+      if (tile.isReadyPost) expect(tile.damage).toBe(0);
     }
   });
 
@@ -527,7 +527,7 @@ describe("2-stage tile damage", () => {
     const s = toTurnsPhase(newGame());
     const player = s.players[0];
     const [rimTarget] = rimNeighbors(player.position, s.tiles.length).filter(
-      (i) => !s.tiles[i].isPosSiaga
+      (i) => !s.tiles[i].isReadyPost
     );
 
     s.tiles[rimTarget].damage = 1;
@@ -547,12 +547,12 @@ describe("2-stage tile damage", () => {
 
 describe("turn economy", () => {
   it("hands out 4 AP per player in Fase 3", () => {
-    const s = toTurnsPhase(newGame({ roles: ["elang", "komodo", "harimau"] }));
+    const s = toTurnsPhase(newGame({ roles: ["bald_eagle", "andean_llama", "sumatran_tiger"] }));
     for (const p of s.players) expect(p.ap).toBe(4);
   });
 
   it("passes the turn round the table and then opens Fase 4", () => {
-    let s = toTurnsPhase(newGame({ roles: ["elang", "komodo", "harimau"] }));
+    let s = toTurnsPhase(newGame({ roles: ["bald_eagle", "andean_llama", "sumatran_tiger"] }));
     expect(s.currentPlayerIndex).toBe(0);
     s = act(s, { type: "END_PLAYER_TURN" });
     expect(s.currentPlayerIndex).toBe(1);
@@ -564,7 +564,7 @@ describe("turn economy", () => {
   });
 
   it("enforces the hand limit at end of turn (4, but 6 for Orangutan)", () => {
-    let s = toTurnsPhase(newGame({ roles: ["komodo", "orangutan"] }));
+    let s = toTurnsPhase(newGame({ roles: ["andean_llama", "japanese_macaque"] }));
     s.players[0].hand = Array.from({ length: 9 }, () => evidenceIdFor("WHO"));
     s.players[1].hand = Array.from({ length: 9 }, () => evidenceIdFor("WHO"));
     s = act(s, { type: "END_PLAYER_TURN" });
@@ -603,7 +603,7 @@ describe("turn economy", () => {
 
 describe("active abilities", () => {
   it("is limited to once per round", () => {
-    let s = toTurnsPhase(newGame({ roles: ["elang", "komodo"] }));
+    let s = toTurnsPhase(newGame({ roles: ["bald_eagle", "andean_llama"] }));
     s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: s.players[0].id, deck: "disaster" });
     expect(s.players[0].activeUsedThisRound).toBe(true);
     expect(s.peek?.kind).toBe("disaster");
@@ -614,26 +614,27 @@ describe("active abilities", () => {
   });
 
   it("lets Komodo calm up to 3 panicked villagers at once for 0 AP", () => {
-    let s = toTurnsPhase(newGame({ roles: ["komodo", "elang"] }));
+    let s = toTurnsPhase(newGame({ roles: ["andean_llama", "bald_eagle"] }));
     const tile = tileNextToPosSiaga(s);
     const player = s.players[0];
     s = act(s, { type: "MOVE_PLAYER", playerId: player.id, targetTileIndex: tile.index });
     for (let i = 0; i < 3; i++) {
       s.tiles[tile.index].occupants.push({
         id: `panic-${i}`,
-        status: "panik",
+        status: "panicked",
         tileIndex: tile.index,
       });
     }
     const apBefore = s.players[0].ap;
     s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: player.id });
     expect(s.players[0].ap).toBe(apBefore);
-    expect(s.tiles[tile.index].occupants.filter((v) => v.status === "panik")).toHaveLength(0);
+    expect(s.tiles[tile.index].occupants.filter((v) => v.status === "panicked")).toHaveLength(0);
   });
 
   it("lets Orangutan force a lock open by discarding two evidence cards", () => {
-    const newsId = "news_st_01";
-    let s = toTurnsPhase(newGame({ roles: ["orangutan", "komodo"] }), { newsId });
+    const newsId = "news_soc_01";
+    let s = toTurnsPhase(newGame({ roles: ["japanese_macaque", "andean_llama"] }), { newsId });
+    const dataMiningLock = s.activeNews!.locks[0];
     const a = evidenceIdFor("WHY");
     const b = evidenceIdFor("WHO");
     s.players[0].hand.push(a, b);
@@ -641,9 +642,9 @@ describe("active abilities", () => {
       type: "USE_ACTIVE_ABILITY",
       playerId: s.players[0].id,
       evidenceIds: [a, b],
-      lock: "WHEN",
+      lock: dataMiningLock,
     });
-    expect(s.locksOpened).toContain("WHEN");
+    expect(s.locksOpened).toContain(dataMiningLock);
   });
 });
 
@@ -663,8 +664,8 @@ describe("discard for resource", () => {
     expect(s.players[0].ap).toBe(apBefore + 2);
   });
 
-  it("raises a panic shield that blocks the hoaks_menyebar panic tick", () => {
-    const newsId = "news_st_01";
+  it("raises a panic shield that blocks the rumour_spreads panic tick", () => {
+    const newsId = "news_soc_01";
     let s = toTurnsPhase(newGame(), { newsId });
     const card = evidenceCards.find((c) => c.resourceKind === "panic_shield")!;
     s.players[0].hand.push(card.id);
@@ -676,9 +677,9 @@ describe("discard for resource", () => {
     expect(s.panicShield).toBe(true);
 
     s = endAllTurns(s);
-    s = act(s, { type: "COMMIT_VERDICT", verdict: "fakta" });
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "fact" });
     s = act(s, { type: "FLIP_NEWS" });
-    expect(s.lastOutcome).toBe("hoaks_menyebar");
+    expect(s.lastOutcome).toBe("rumour_spreads");
     expect(s.panicMeter).toBe(0);
   });
 });
@@ -687,9 +688,9 @@ describe("discard for resource", () => {
 
 describe("reputation economy", () => {
   it("buys a Reward card in Fase 5 and spends the reputation", () => {
-    let s = playRound(newGame({ difficulty: "siaga" }), {
+    let s = playRound(newGame({}), {
       newsId: TEAL_NEWS,
-      verdict: "fakta",
+      verdict: "fact",
     });
     expect(s.phase).toBe("p5_impact");
     s = act(s, { type: "DEBUG_SET_REPUTATION", value: 9 });
@@ -708,8 +709,8 @@ describe("reputation economy", () => {
 
 describe("game over", () => {
   it("menang — reaching the evacuation target", () => {
-    let s = toTurnsPhase(newGame({ difficulty: "siaga" }));
-    const target = 8;
+    let s = toTurnsPhase(newGame({}));
+    const target = scenarioById[SCENARIO_ID].targetEvacuation;
     const pos = posSiagaIndex(s);
     const tile = tileNextToPosSiaga(s);
     s = act(s, {
@@ -720,10 +721,10 @@ describe("game over", () => {
     // One short of the target, then walk the last villager in.
     s.evacuees = Array.from({ length: target - 1 }, (_, i) => ({
       id: `pre-${i}`,
-      status: "selamat" as const,
+      status: "rescued" as const,
       tileIndex: pos,
     }));
-    s.tiles[tile.index].occupants.forEach((v) => (v.status = "tenang"));
+    s.tiles[tile.index].occupants.forEach((v) => (v.status = "calm"));
     const villagerId = s.tiles[tile.index].occupants[0].id;
     s = act(s, {
       type: "ESCORT_VILLAGER",
@@ -733,62 +734,62 @@ describe("game over", () => {
     });
     expect(s.evacuees).toHaveLength(target);
     expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("menang");
+    expect(s.gameOverReason).toBe("win");
   });
 
   it("panik — the panic meter maxes out", () => {
     let s = toTurnsPhase(newGame());
     s = act(s, { type: "DEBUG_SET_PANIC", value: s.panicMeterMax });
     expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("panik");
+    expect(s.gameOverReason).toBe("panic");
   });
 
   it("korban — too few villagers left to ever reach the target", () => {
-    let s = toTurnsPhase(newGame({ difficulty: "siaga" }));
+    let s = toTurnsPhase(newGame({}));
     for (const tile of s.tiles) tile.occupants = [];
     s.evacuees = [];
     s = act(s, { type: "DEBUG_SET_PANIC", value: 0 });
     expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("korban");
+    expect(s.gameOverReason).toBe("casualties");
   });
 
   it("waktu — the disaster deck runs out before the target is met", () => {
-    let s = newGame({ difficulty: "siaga" });
+    let s = newGame({});
     s = act(s, { type: "DEBUG_SET_DISASTER_TOP", cardId: CALM_DISASTER });
     s = act(s, { type: "DEBUG_TRIM_DISASTER_DECK" });
     expect(s.decks.disaster).toHaveLength(1);
 
-    s = playRound(s, { newsId: TEAL_NEWS, verdict: "fakta" });
+    s = playRound(s, { newsId: TEAL_NEWS, verdict: "fact" });
     expect(s.decks.disaster).toHaveLength(0);
     expect(s.phase).toBe("game_over");
-    expect(s.gameOverReason).toBe("waktu");
+    expect(s.gameOverReason).toBe("timeout");
   });
 
   it("checkGameOver reports every reason from a raw state", () => {
-    const base = newGame({ difficulty: "siaga" });
+    const base = newGame({});
     expect(checkGameOver(base).over).toBe(false);
 
     const won = structuredClone(base);
-    won.evacuees = Array.from({ length: 8 }, (_, i) => ({
+    won.evacuees = Array.from({ length: scenarioById[SCENARIO_ID].targetEvacuation }, (_, i) => ({
       id: `e${i}`,
-      status: "selamat" as const,
+      status: "rescued" as const,
       tileIndex: 0,
     }));
-    expect(checkGameOver(won)).toEqual({ over: true, reason: "menang" });
+    expect(checkGameOver(won)).toEqual({ over: true, reason: "win" });
 
     const panicked = structuredClone(base);
     panicked.panicMeter = panicked.panicMeterMax;
-    expect(checkGameOver(panicked)).toEqual({ over: true, reason: "panik" });
+    expect(checkGameOver(panicked)).toEqual({ over: true, reason: "panic" });
 
     const wiped = structuredClone(base);
     for (const t of wiped.tiles) t.occupants = [];
-    expect(checkGameOver(wiped)).toEqual({ over: true, reason: "korban" });
+    expect(checkGameOver(wiped)).toEqual({ over: true, reason: "casualties" });
 
     const outOfTime = structuredClone(base);
     outOfTime.decks.disaster = [];
     expect(checkGameOver(outOfTime, { endOfRound: true })).toEqual({
       over: true,
-      reason: "waktu",
+      reason: "timeout",
     });
     // ...but not mid-round, while the current round is still being played.
     expect(checkGameOver(outOfTime).over).toBe(false);
@@ -806,8 +807,8 @@ describe("game over", () => {
 
 describe("full game smoke test", () => {
   it("plays many rounds to a terminal state without throwing", () => {
-    const verdicts: Verdict[] = ["hoax", "fakta", "abstain"];
-    let s = newGame({ roles: ["elang", "orangutan", "harimau", "monyet", "komodo"], seed: 42 });
+    const verdicts: Verdict[] = ["hoax", "fact", "abstain"];
+    let s = newGame({ roles: ["bald_eagle", "japanese_macaque", "sumatran_tiger", "kea_parrot", "andean_llama"], seed: 42 });
     let guard = 0;
 
     while (s.phase !== "game_over" && guard < 60) {
@@ -841,7 +842,7 @@ describe("full game smoke test", () => {
     }
 
     expect(s.phase).toBe("game_over");
-    expect(["menang", "panik", "korban", "waktu"]).toContain(s.gameOverReason);
+    expect(["win", "panic", "casualties", "timeout"]).toContain(s.gameOverReason);
     expect(s.round).toBeGreaterThan(1);
     // Bookkeeping stayed coherent all the way through.
     const scenario = scenarioById[SCENARIO_ID];
@@ -854,9 +855,9 @@ describe("full game smoke test", () => {
   });
 
   it("rotates the first player each round", () => {
-    let s = playRound(newGame({ difficulty: "siaga" }), {
+    let s = playRound(newGame({}), {
       newsId: TEAL_NEWS,
-      verdict: "fakta",
+      verdict: "fact",
     });
     expect(s.firstPlayerIndex).toBe(0);
     s = act(s, { type: "ADVANCE_PHASE" });

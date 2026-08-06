@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NewsCardDisplay } from "@/components/cards/NewsCardDisplay";
 import { OutcomeBanner } from "@/components/cards/OutcomeBanner";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * FASE 4 — SIDANG FAKTA (Commit & Flip).
@@ -103,7 +103,7 @@ export function VerdictPanel({
               onPick={setPending}
             />
             <VerdictButton
-              verdict="fakta"
+              verdict="fact"
               label={id.verdict.fakta}
               hint={id.verdict.faktaHint}
               className="border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
@@ -180,7 +180,7 @@ export function VerdictPanel({
 
 function verdictLabel(v: Verdict | null): string {
   if (v === "hoax") return id.verdict.hoax;
-  if (v === "fakta") return id.verdict.fakta;
+  if (v === "fact") return id.verdict.fakta;
   if (v === "abstain") return id.verdict.abstain;
   return id.common.none;
 }

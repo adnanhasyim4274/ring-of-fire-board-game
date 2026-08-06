@@ -1,7 +1,7 @@
 "use client";
 import { Flame, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Dek Bencana adalah jam permainan: habis = kalah karena Kehabisan Waktu. */
 export function DisasterDeckCounter({

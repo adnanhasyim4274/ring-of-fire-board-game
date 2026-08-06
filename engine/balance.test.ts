@@ -13,17 +13,17 @@ import { reduce } from "./reducer";
 import { allNeighbors, isPassable, rimNeighbors } from "./rules";
 import type { GameAction, GameState } from "./types";
 import { scenarioById } from "@/data/scenarios";
+import { roleById } from "@/data/roles";
 import { evidenceCards } from "@/data/evidenceCards";
 
 const SID = Object.keys(scenarioById)[0];
 const go = (s: GameState, a: GameAction) => reduce(s, a)!;
 
-function start(seed: number, difficulty: GameState["difficulty"] = "awas"): GameState {
+function start(seed: number): GameState {
   return reduce(null, {
     type: "START_GAME",
     scenarioId: SID,
-    difficulty,
-    players: ["elang", "orangutan", "harimau", "monyet"].map((r, i) => ({
+    players: ["bald_eagle", "japanese_macaque", "sumatran_tiger", "andean_llama"].map((r, i) => ({
       name: `P${i + 1}`,
       roleId: r,
     })),
@@ -57,7 +57,7 @@ function nearestPosSiaga(s: GameState, from: number): number {
   let best = -1;
   let bd = 99;
   s.tiles.forEach((t, i) => {
-    if (!t.isPosSiaga) return;
+    if (!t.isReadyPost) return;
     const d = dist(s, from, i);
     if (d < bd) { bd = d; best = i; }
   });
@@ -69,8 +69,21 @@ function rescueStep(s: GameState): GameAction | null {
   const p = s.players[s.currentPlayerIndex];
   const tile = s.tiles[p.position];
 
+  // A competent team uses its free once-per-round abilities. The Andean Llama
+  // clearing a Crisis Token matters most: an unresolved rumour locks evacuation
+  // out of that tile entirely, so without this the bot strands whole sectors.
+  if (!p.activeUsedThisRound) {
+    const role = roleById[p.roleId];
+    if (role?.activeKey === "suppress" && (tile.hasCrisisToken || tile.occupants.some((v) => v.status === "panicked"))) {
+      return { type: "USE_ACTIVE_ABILITY", playerId: p.id };
+    }
+    if (role?.activeKey === "tactical_escort" && tile.occupants.length > 0) {
+      return { type: "USE_ACTIVE_ABILITY", playerId: p.id };
+    }
+  }
+
   // Escort a calm villager toward safety.
-  const calm = tile.occupants.filter((v) => v.status === "tenang");
+  const calm = tile.occupants.filter((v) => v.status === "calm");
   if (calm.length > 0) {
     const goal = nearestPosSiaga(s, p.position);
     if (goal >= 0) {
@@ -81,20 +94,20 @@ function rescueStep(s: GameState): GameAction | null {
         if (d < bd) { bd = d; bestN = n; }
       }
       if (bestN >= 0) {
-        const carry = calm.slice(0, p.roleId === "harimau" ? 2 : 1).map((v) => v.id);
+        const carry = calm.slice(0, roleById[p.roleId]?.activeKey === "tactical_escort" ? 2 : 1).map((v) => v.id);
         return {
           type: "ESCORT_VILLAGER",
           playerId: p.id,
           villagerIds: carry,
           targetTileIndex: bestN,
-          viaSeaRoute: !rimNeighbors(p.position, s.tiles.length).includes(bestN),
+          viaSeaLane: !rimNeighbors(p.position, scenarioById[SID].ringSize).includes(bestN),
         };
       }
     }
   }
 
   // Calm a panicking villager here.
-  const panicked = tile.occupants.find((v) => v.status === "panik");
+  const panicked = tile.occupants.find((v) => v.status === "panicked");
   if (panicked) {
     return { type: "CALM_VILLAGER", playerId: p.id, villagerId: panicked.id };
   }
@@ -102,7 +115,7 @@ function rescueStep(s: GameState): GameAction | null {
   // Walk toward the nearest villager still on the board.
   let target = -1, td = 99;
   s.tiles.forEach((t, i) => {
-    if (t.occupants.length === 0 || t.isPosSiaga) return;
+    if (t.occupants.length === 0 || t.isReadyPost) return;
     const d = dist(s, p.position, i);
     if (d < td) { td = d; target = i; }
   });
@@ -118,15 +131,15 @@ function rescueStep(s: GameState): GameAction | null {
         type: "MOVE_PLAYER",
         playerId: p.id,
         targetTileIndex: bestN,
-        viaSeaRoute: !rimNeighbors(p.position, s.tiles.length).includes(bestN),
+        viaSeaLane: !rimNeighbors(p.position, scenarioById[SID].ringSize).includes(bestN),
       };
     }
   }
   return null;
 }
 
-function playGame(seed: number, difficulty: GameState["difficulty"] = "awas") {
-  let s = start(seed, difficulty);
+function playGame(seed: number) {
+  let s = start(seed);
   let guard = 0;
   while (s.phase !== "game_over" && guard < 3000) {
     guard++;
@@ -151,20 +164,23 @@ function playGame(seed: number, difficulty: GameState["difficulty"] = "awas") {
           const next = go(s, { type: "PLAY_EVIDENCE_LOCK", playerId: p.id, evidenceId: card, lock });
           if (next.locksOpened.length > s.locksOpened.length) { s = next; break; }
         }
+        // Free abilities cost 0 AP, so firing one must not end the turn.
         const act = rescueStep(s);
         if (act) {
           const next = go(s, act);
-          // Only accept real progress, else pass the turn.
-          if (next.players[s.currentPlayerIndex].ap < p.ap || next.evacuees.length > s.evacuees.length) {
-            s = next; break;
-          }
+          const free = act.type === "USE_ACTIVE_ABILITY";
+          const progressed =
+            next.players[s.currentPlayerIndex].ap < p.ap ||
+            next.evacuees.length > s.evacuees.length ||
+            (free && next.players[s.currentPlayerIndex].activeUsedThisRound);
+          if (progressed) { s = next; break; }
         }
         s = go(s, { type: "END_PLAYER_TURN" });
         break;
       }
       case "p4_verdict":
         if (!s.verdict) {
-          s = go(s, { type: "COMMIT_VERDICT", verdict: s.activeNews!.truth === "hoax" ? "hoax" : "fakta" });
+          s = go(s, { type: "COMMIT_VERDICT", verdict: s.activeNews!.truth === "hoax" ? "hoax" : "fact" });
         } else if (!s.newsRevealed) {
           s = go(s, { type: "FLIP_NEWS" });
         } else {
@@ -189,11 +205,11 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
       results[key] = (results[key] ?? 0) + 1;
       totalEvac += s.evacuees.length;
       totalRep += s.reputation;
-      if (s.gameOverReason === "menang") wins++;
+      if (s.gameOverReason === "win") wins++;
     }
     console.log(
-      `[BALANCE awas] outcomes=${JSON.stringify(results)} ` +
-        `avgEvac=${(totalEvac / 12).toFixed(1)}/10 avgRep=${(totalRep / 12).toFixed(1)} wins=${wins}/12`
+      `[BALANCE] outcomes=${JSON.stringify(results)} ` +
+        `avgEvac=${(totalEvac / 12).toFixed(1)}/12 avgRep=${(totalRep / 12).toFixed(1)} wins=${wins}/12`
     );
     // The bar: a greedy bot must at least be able to rescue meaningfully.
     expect(totalEvac / 12).toBeGreaterThan(2);
@@ -249,7 +265,7 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
       const s = playIgnoringMil(seed);
       const key = s.gameOverReason ?? "none";
       outcomes[key] = (outcomes[key] ?? 0) + 1;
-      if (s.gameOverReason === "menang") wins++;
+      if (s.gameOverReason === "win") wins++;
     }
     console.log(`[INTEGRITY ignore-MIL] outcomes=${JSON.stringify(outcomes)} wins=${wins}/12`);
     // Skipping verification must be punished. A rare lucky win is healthy — a
@@ -257,14 +273,4 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     expect(wins).toBeLessThanOrEqual(2);
   });
 
-  it("reports Siaga (easy) outcomes", () => {
-    let wins = 0, totalEvac = 0;
-    for (let seed = 1; seed <= 8; seed++) {
-      const s = playGame(seed, "siaga");
-      totalEvac += s.evacuees.length;
-      if (s.gameOverReason === "menang") wins++;
-    }
-    console.log(`[BALANCE siaga] avgEvac=${(totalEvac / 8).toFixed(1)}/8 wins=${wins}/8`);
-    expect(totalEvac).toBeGreaterThan(0);
-  });
 });

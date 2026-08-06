@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Sisa Action Point pemain aktif — dibaca sebagai pip, bukan cuma angka. */
 export function APCounter({

@@ -2,7 +2,7 @@
 import { motion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Jalur 0..max. Penuh = kalah karena Gagal Literasi. */
 export function PanicMeter({ value, max }: { value: number; max: number }) {

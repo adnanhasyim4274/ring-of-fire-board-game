@@ -13,14 +13,14 @@ import type { GameState, Player } from "@/engine/types";
 import {
   allNeighbors,
   areRimAdjacent,
-  areSeaRouteLinked,
+  areSeaLaneLinked,
   calmCost,
   escortBlocked,
   escortCost,
   handLimit,
   isCategoryBlocked,
   isPassable,
-  isSeaRouteOpen,
+  isSeaLaneOpen,
   maxEscortGroup,
   moveCost,
 } from "@/engine/rules";
@@ -28,12 +28,12 @@ import {
 /** Apakah perpindahan a -> b memakai Rute Laut, bukan langkah rim biasa. */
 export function isSeaRouteMove(state: GameState, from: number, to: number): boolean {
   if (areRimAdjacent(state, from, to)) return false;
-  return areSeaRouteLinked(state, from, to);
+  return areSeaLaneLinked(state, from, to);
 }
 
 export interface MoveOption {
   index: number;
-  viaSeaRoute: boolean;
+  viaSeaLane: boolean;
   cost: number;
   escortCost: number;
   affordable: boolean;
@@ -50,13 +50,13 @@ export function legalMoves(state: GameState, player: Player): MoveOption[] {
   return allNeighbors(state, player.position)
     .filter((index) => isPassable(state.tiles[index]))
     .map((index) => {
-      const viaSeaRoute = isSeaRouteMove(state, player.position, index);
-      const cost = moveCost(state, player.position, index, player, viaSeaRoute);
+      const viaSeaLane = isSeaRouteMove(state, player.position, index);
+      const cost = moveCost(state, player.position, index, player, viaSeaLane);
       return {
         index,
-        viaSeaRoute,
+        viaSeaLane,
         cost,
-        escortCost: escortCost(state, player.position, index, player, viaSeaRoute),
+        escortCost: escortCost(state, player.position, index, player, viaSeaLane),
         affordable: player.ap >= cost,
         escortBlocked: from ? escortBlocked(state, from, state.tiles[index]) : true,
       };
@@ -64,8 +64,8 @@ export function legalMoves(state: GameState, player: Player): MoveOption[] {
 }
 
 /** Berapa warga yang boleh dibawa satu aksi kawal (Harimau 2, Rute Laut selalu 1). */
-export function escortGroupLimit(player: Player, viaSeaRoute: boolean): number {
-  return maxEscortGroup(player, viaSeaRoute);
+export function escortGroupLimit(player: Player, viaSeaLane: boolean): number {
+  return maxEscortGroup(player, viaSeaLane);
 }
 
 export {
@@ -74,6 +74,6 @@ export {
   handLimit,
   isCategoryBlocked,
   isPassable,
-  isSeaRouteOpen,
+  isSeaLaneOpen,
   moveCost,
 };

@@ -2,17 +2,24 @@
 import { memo } from "react";
 import type { Player, TileState } from "@/engine/types";
 import {
-  POS_SIAGA_COLOR,
-  POS_SIAGA_EDGE,
+  READY_POST_COLOR,
+  READY_POST_EDGE,
   SECTOR_COLOR,
   SECTOR_EDGE,
   SECTOR_GLYPH,
-  SEA_ROUTE_COLOR,
+  SEA_LANE_COLOR,
+  SEA_LANE_EDGE,
   CRISIS_COLOR,
 } from "@/lib/theme";
-import { HEX_RADIUS, tileCentre, tileHexPoints } from "@/lib/ring";
+import {
+  HEX_RADIUS,
+  seaLaneHexPoints,
+  seaLaneTileCentre,
+  tileCentre,
+  tileHexPoints,
+} from "@/lib/ring";
 import { emojiForRole } from "@/lib/roleEmoji";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * Ikon bentuk per sektor. Ini isyarat NON-WARNA yang wajib ada supaya sektor
@@ -20,21 +27,26 @@ import { id } from "@/lib/i18n/id";
  */
 const GLYPH_PATH: Record<string, string> = {
   // Gunung api meletus — Busur Vulkanik
-  gunung: "M -16 13 L -6 -9 L 6 -9 L 16 13 Z M -6 -9 L -2 -16 M 6 -9 L 3 -17",
+  volcano: "M -16 13 L -6 -9 L 6 -9 L 16 13 Z M -6 -9 L -2 -16 M 6 -9 L 3 -17",
   // Gelombang tsunami — Busur Salju & Tsunami
-  gelombang:
+  wave:
     "M -17 2 q 8.5 -11 17 0 q 8.5 11 17 0 M -17 11 q 8.5 -11 17 0 q 8.5 11 17 0",
   // Jajaran puncak — Busur Pegunungan & Gurun
-  puncak: "M -18 13 L -7 -8 L -1 1 L 6 -14 L 18 13 Z",
-  // Pulau vulkanik — Busur Kepulauan Vulkanik
-  pulau: "M -17 10 q 9 -6 17 0 q 8 6 17 0 M -8 2 L 0 -13 L 8 2 Z",
+  peaks: "M -18 13 L -7 -8 L -1 1 L 6 -14 L 18 13 Z",
+  // Pulau volcanic — Busur Kepulauan Vulkanik
+  island: "M -17 10 q 9 -6 17 0 q 8 6 17 0 M -8 2 L 0 -13 L 8 2 Z",
   // Tenda posko — Pos Siaga
-  pos: "M -15 12 L 0 -13 L 15 12 Z M 0 -13 L 0 12 M 0 -13 L 0 -19 L 10 -16 L 0 -13",
+  post: "M -15 12 L 0 -13 L 15 12 Z M 0 -13 L 0 12 M 0 -13 L 0 -19 L 10 -16 L 0 -13",
 };
 
 export interface RingTileProps {
   tile: TileState;
   ringSize: number;
+  /** Position of this tile within the Sea Lane chain, or -1 if it is a rim tile. */
+  seaLaneOrder?: number;
+  seaLaneCount?: number;
+  seaLaneEndpoints?: [number, number];
+  seaLaneOpen?: boolean;
   regionName?: string;
   players: Player[];
   isSelected: boolean;
@@ -47,6 +59,10 @@ export interface RingTileProps {
 function RingTileImpl({
   tile,
   ringSize,
+  seaLaneOrder = -1,
+  seaLaneCount = 0,
+  seaLaneEndpoints = [0, 12],
+  seaLaneOpen = true,
   regionName,
   players,
   isSelected,
@@ -55,31 +71,53 @@ function RingTileImpl({
   isNewsTarget,
   onSelect,
 }: RingTileProps) {
-  const centre = tileCentre(tile.index, ringSize);
-  const points = tileHexPoints(tile.index, ringSize);
+  // Sea Lane tiles sit on a chord through the middle, not on the ring circle.
+  const onLane = tile.isSeaLane && seaLaneOrder >= 0;
+  const centre = onLane
+    ? seaLaneTileCentre(seaLaneOrder, seaLaneCount, seaLaneEndpoints[0], seaLaneEndpoints[1], ringSize)
+    : tileCentre(tile.index, ringSize);
+  const points = onLane
+    ? seaLaneHexPoints(seaLaneOrder, seaLaneCount, seaLaneEndpoints[0], seaLaneEndpoints[1], ringSize)
+    : tileHexPoints(tile.index, ringSize);
   const hancur = tile.damage === 2;
   const retak = tile.damage === 1;
 
-  const fill = tile.isPosSiaga
-    ? POS_SIAGA_COLOR
-    : tile.sectorId
-      ? SECTOR_COLOR[tile.sectorId]
-      : POS_SIAGA_COLOR;
-  const edge = tile.isPosSiaga
-    ? POS_SIAGA_EDGE
-    : tile.sectorId
-      ? SECTOR_EDGE[tile.sectorId]
-      : POS_SIAGA_EDGE;
-  const glyph = tile.isPosSiaga ? "pos" : SECTOR_GLYPH[tile.sectorId ?? "merah"];
+  const fill = tile.isSeaLane
+    ? SEA_LANE_COLOR
+    : tile.isReadyPost
+      ? READY_POST_COLOR
+      : tile.sectorId
+        ? SECTOR_COLOR[tile.sectorId]
+        : READY_POST_COLOR;
+  const edge = tile.isSeaLane
+    ? SEA_LANE_EDGE
+    : tile.isReadyPost
+      ? READY_POST_EDGE
+      : tile.sectorId
+        ? SECTOR_EDGE[tile.sectorId]
+        : READY_POST_EDGE;
+  const glyph = tile.isSeaLane
+    ? "lane"
+    : tile.isReadyPost
+      ? "post"
+      : tile.sectorId
+        ? SECTOR_GLYPH[tile.sectorId]
+        : "post";
 
-  const calm = tile.occupants.filter((v) => v.status === "tenang");
-  const panicked = tile.occupants.filter((v) => v.status === "panik");
+  const calm = tile.occupants.filter((v) => v.status === "calm");
+  const panicked = tile.occupants.filter((v) => v.status === "panicked");
   const shown = [...panicked, ...calm].slice(0, 3);
   const overflow = tile.occupants.length - shown.length;
 
   const label = [
     regionName ?? `${id.board.title} ${tile.index}`,
-    tile.isPosSiaga ? id.board.posSiaga : id.board.sectorCue[tile.sectorId ?? "merah"],
+    tile.isSeaLane
+      ? id.board.seaLane
+      : tile.isReadyPost
+        ? id.board.posSiaga
+        : tile.sectorId
+          ? id.board.sectorCue[tile.sectorId]
+          : id.board.posSiaga,
     retak ? id.board.damage[1] : hancur ? id.board.damage[2] : null,
     tile.hasCrisisToken ? id.board.crisisToken : null,
     calm.length ? `${calm.length} ${id.board.calm}` : null,
@@ -104,13 +142,15 @@ function RingTileImpl({
         }
       }}
     >
-      {/* Badan ubin */}
+      {/* Tile body. A closed Sea Lane is dimmed AND dashed, so the state reads
+          without relying on colour alone. */}
       <polygon
         points={points}
         fill={hancur ? "#1b1b1f" : fill}
         stroke={hancur ? "#000000" : edge}
         strokeWidth={3}
-        opacity={hancur ? 0.9 : 1}
+        strokeDasharray={onLane && !seaLaneOpen ? "10 8" : undefined}
+        opacity={hancur ? 0.9 : onLane && !seaLaneOpen ? 0.35 : 1}
       />
 
       {/* Watermark ikon sektor — isyarat non-warna */}
@@ -178,7 +218,7 @@ function RingTileImpl({
             const step = 22;
             const x = centre.x + (i - (shown.length - 1) / 2) * step;
             const y = centre.y + 8;
-            return v.status === "panik" ? (
+            return v.status === "panicked" ? (
               <g key={v.id}>
                 <rect
                   x={x - 8.5}
@@ -310,7 +350,7 @@ function RingTileImpl({
         <polygon
           points={points}
           fill="none"
-          stroke={SEA_ROUTE_COLOR}
+          stroke={SEA_LANE_COLOR}
           strokeWidth={7}
           strokeDasharray="14 8"
         />

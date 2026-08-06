@@ -8,19 +8,19 @@ import { PanicMeter } from "@/components/hud/PanicMeter";
 import { ReputationTrack } from "@/components/hud/ReputationTrack";
 import { DisasterDeckCounter } from "@/components/hud/DisasterDeckCounter";
 import { APCounter } from "@/components/hud/APCounter";
-import { isSeaRouteOpen } from "@/lib/engineBridge";
+import { isSeaLaneOpen } from "@/lib/engineBridge";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Papan status tim: satu blok, terbaca sekali lihat di lebar 375px. */
 export function GameHud({ state, scenario }: { state: GameState; scenario: Scenario }) {
   const current = state.players[state.currentPlayerIndex];
-  const target = gameConfig.difficulties[state.difficulty].targetEvacuation;
-  const deckTotal = gameConfig.difficulties[state.difficulty].disasterDeckSize;
+  const target = scenario.targetEvacuation ?? gameConfig.targetEvacuation;
+  const deckTotal = scenario.disasterDeckSize ?? gameConfig.disasterDeckSize;
   const canAfford = rewardCards.some(
     (r) => !state.ownedRewards.includes(r.id) && state.reputation >= r.cost
   );
-  const seaOpen = isSeaRouteOpen(state);
+  const seaOpen = isSeaLaneOpen(state);
 
   return (
     <header className="space-y-2 rounded-2xl border border-black/10 bg-white/85 p-2.5 shadow-sm">
@@ -75,7 +75,7 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
           )}
         >
           {seaOpen ? <Ship className="h-3.5 w-3.5" /> : <Waves className="h-3.5 w-3.5" />}
-          {seaOpen ? id.hud.seaRouteOpen : id.hud.seaRouteClosed}
+          {seaOpen ? id.hud.seaLaneOpen : id.hud.seaRouteClosed}
         </span>
 
         <span className="text-[11px] font-bold text-zinc-500">

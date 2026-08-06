@@ -3,14 +3,13 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, Target, Users, Zap } from "lucide-react";
-import type { DifficultyId } from "@/data/gameConfig";
 import { useGameStore } from "@/store/gameStore";
 import { roles } from "@/data/roles";
 import { scenarios } from "@/data/scenarios";
 import { gameConfig } from "@/data/gameConfig";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
 
 interface Slot {
@@ -18,18 +17,12 @@ interface Slot {
   roleId: string;
 }
 
-const DIFFICULTY_TINT: Record<DifficultyId, string> = {
-  siaga: "border-emerald-500 bg-emerald-50",
-  awas: "border-amber-500 bg-amber-50",
-  darurat: "border-red-500 bg-red-50",
-};
 
 export default function SetupPage() {
   const dispatch = useGameStore((s) => s.dispatch);
   const router = useRouter();
 
   const [scenarioId, setScenarioId] = useState<string>(gameConfig.defaultScenarioId);
-  const [difficulty, setDifficulty] = useState<DifficultyId>(gameConfig.defaultDifficulty);
   const [slots, setSlots] = useState<Slot[]>([
     { name: "", roleId: "" },
     { name: "", roleId: "" },
@@ -51,7 +44,6 @@ export default function SetupPage() {
     dispatch({
       type: "START_GAME",
       scenarioId,
-      difficulty,
       players: slots.map((s, i) => ({
         name:
           s.name.trim() ||
@@ -103,50 +95,6 @@ export default function SetupPage() {
         </p>
       )}
 
-      {/* Level kesulitan */}
-      <section>
-        <h2 className="mb-2 text-xs font-black uppercase tracking-wide text-zinc-500">
-          {id.setup.difficulty}
-        </h2>
-        <div className="grid gap-2">
-          {(Object.keys(gameConfig.difficulties) as DifficultyId[]).map((key) => {
-            const d = gameConfig.difficulties[key];
-            const selected = difficulty === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setDifficulty(key)}
-                aria-pressed={selected}
-                className={cn(
-                  "min-h-11 rounded-xl border-2 p-2.5 text-left transition-colors",
-                  selected
-                    ? DIFFICULTY_TINT[key]
-                    : "border-zinc-200 bg-white hover:border-zinc-300"
-                )}
-              >
-                <span className="flex items-baseline gap-2">
-                  <span className="text-sm font-black">{d.name}</span>
-                  <span className="text-[11px] text-zinc-500">{d.blurb}</span>
-                </span>
-                <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] font-bold text-zinc-600">
-                  <span>
-                    {id.setup.difficultyStats.target}: {d.targetEvacuation}{" "}
-                    {id.setup.difficultyStats.villagers}
-                  </span>
-                  <span>
-                    {id.setup.difficultyStats.panic}: {d.panicMeterMax}
-                  </span>
-                  <span>
-                    {id.setup.difficultyStats.deck}: {d.disasterDeckSize}{" "}
-                    {id.setup.difficultyStats.cards}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
       {/* Jumlah pemain */}
       <section>

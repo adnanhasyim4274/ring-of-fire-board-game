@@ -1,255 +1,244 @@
 // ============================================================================
-// RING OF FIRE v2.0 — Kartu Bencana (16 kartu, 4 kategori x 4)
-// Dek ini sekaligus JAM PERMAINAN: habis = waktu habis.
-// Dampak Kejadian berlaku sepanjang ronde; Konsekuensi Akhir merusak ubin di Fase 5.
-// Kategori "oseanografi" aktif => seluruh Rute Laut TERTUTUP ronde itu.
-// Sumber: docs/00-MASTER-SPEC-v2.md §5.3
+// RING OF FIRE v3.0 — Disaster Cards (16)
+// 4 per category. The deck is also the clock: when it runs out, time is up.
+//
+// Every card has a Round Effect (rewrites this round's rules) and a Final
+// Consequence (damage applied at the end of the round).
+//
+// OCEANIC cards close the Sea Lane completely — the engine keys that off the
+// category, so any oceanic card shuts the crossing.
+//
+// Source: docs/00-MASTER-SPEC-v3.md §4.3
 // ============================================================================
 
-import type { DisasterCard, DisasterCategory } from "@/engine/types";
+import type { DisasterCard } from "@/engine/types";
 
 export const disasterCards: DisasterCard[] = [
-  // ——————————————————————————————————————————————————————————————————
-  // TEKTONIK
-  // ——————————————————————————————————————————————————————————————————
+  // ——— TECTONIC ————————————————————————————————————————————————————
   {
-    id: "dis_tek_01",
-    category: "tektonik",
-    title: "Gempa Megathrust",
+    id: "dis_tec_01",
+    category: "tectonic",
+    title: "Aftershock Swarm",
     description:
-      "Bidang kontak dua lempeng yang terkunci selama ratusan tahun lepas sekaligus. Guncangannya panjang, dalam, dan terasa sampai ratusan kilometer dari pusatnya.",
-    locationLabel: "Zona subduksi sepanjang Busur Pegunungan & Gurun",
+      "The ground will not settle. Cracked walls that survived the first shock are giving way in the tremors that follow.",
+    locationLabel: "Fault zones",
     roundEffect:
-      "Tanah terus bergoyang: semua perpindahan memerlukan +1 AP ronde ini.",
-    roundEffectKey: "move_penalty",
-    affectedSectorIds: ["kuning"],
-    endEffect:
-      "Ubin dengan warga terbanyak mengalami kerusakan struktural — Retak, atau Hancur bila sudah Retak.",
+      "Every villager in the affected sector panics at the start of this round.",
+    roundEffectKey: "panic_spread",
+    affectedSectorIds: ["cascadia", "sunda"],
+    endEffect: "The fault-line tile with the most villagers takes damage.",
     damageTarget: "most_villagers",
   },
   {
-    id: "dis_tek_02",
-    category: "tektonik",
-    title: "Likuefaksi",
+    id: "dis_tec_02",
+    category: "tectonic",
+    title: "Ground Liquefaction",
     description:
-      "Guncangan mengubah tanah berpasir yang jenuh air menjadi seperti bubur. Bangunan tenggelam berdiri, jalan berubah jadi kubangan lumpur.",
-    locationLabel: "Dataran endapan di Busur Vulkanik",
+      "Saturated soil loses its strength under sustained shaking and starts behaving like a liquid. Roads sink. Vehicles tilt where they stand.",
+    locationLabel: "City districts",
     roundEffect:
-      "Tanah tidak sanggup menahan beban: tidak ada aksi Evakuasi yang boleh masuk atau keluar sektor terdampak.",
+      "No villager can be escorted into or out of the affected sector this round. You can still calm them where they stand.",
     roundEffectKey: "block_escort",
-    affectedSectorIds: ["merah"],
-    endEffect: "Satu ubin di sektor terdampak amblas — Retak, atau Hancur bila sudah Retak.",
+    affectedSectorIds: ["cascadia", "philippine"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
     damageTarget: "affected_sector",
   },
   {
-    id: "dis_tek_03",
-    category: "tektonik",
-    title: "Rentetan Gempa Susulan",
+    id: "dis_tec_03",
+    category: "tectonic",
+    title: "Megathrust Rupture",
     description:
-      "Puluhan gempa kecil beruntun setelah guncangan utama. Tidak ada yang merobohkan sendirian, tapi tidak ada pula yang membiarkan orang tidur.",
-    locationLabel: "Kepulauan Kuril hingga pesisir Tohoku",
-    roundEffect:
-      "Warga di sektor terdampak otomatis menjadi Panik pada awal ronde.",
-    roundEffectKey: "panic_spread",
-    affectedSectorIds: ["teal"],
-    endEffect: "Satu ubin di sektor terdampak retak lebih lebar — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
+      "An oceanic plate slips beneath a continental one along hundreds of kilometres of locked fault. The shaking lasts minutes, not seconds.",
+    locationLabel: "All sectors",
+    roundEffect: "Every move between tiles costs 1 extra AP.",
+    roundEffectKey: "move_penalty",
+    affectedSectorIds: [],
+    endEffect: "The tile holding the most villagers anywhere on the ring takes damage.",
+    damageTarget: "most_villagers",
   },
   {
-    id: "dis_tek_04",
-    category: "tektonik",
-    title: "Longsor Tebing Batu",
+    id: "dis_tec_04",
+    category: "tectonic",
+    title: "Rockfall Cuts the Ridge Road",
     description:
-      "Lereng curam yang sudah jenuh air kehilangan pegangan. Material batu dan tanah meluncur menutup satu-satunya jalan keluar lembah.",
-    locationLabel: "Punggungan curam Busur Kepulauan Vulkanik",
+      "Shaking brings a cliff face down across the only road linking two valleys, taking the relay mast with it.",
+    locationLabel: "Highland passes",
     roundEffect:
-      "Jalur darurat tertutup material: Kartu Evidence tidak boleh dibuang untuk keuntungan pergerakan ronde ini.",
+      "Evidence cards cannot be discarded for movement effects this round — the alternate routes are buried.",
     roundEffectKey: "no_evidence_move",
-    affectedSectorIds: ["biru"],
-    endEffect: "Satu ubin di sektor terdampak tertimbun — Retak, atau Hancur bila sudah Retak.",
+    affectedSectorIds: ["andes"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
     damageTarget: "affected_sector",
   },
 
-  // ——————————————————————————————————————————————————————————————————
-  // VULKANIK
-  // ——————————————————————————————————————————————————————————————————
+  // ——— VOLCANIC ————————————————————————————————————————————————————
   {
-    id: "dis_vul_01",
-    category: "vulkanik",
-    title: "Erupsi Eksplosif",
+    id: "dis_vol_01",
+    category: "volcanic",
+    title: "Heavy Ashfall",
     description:
-      "Sumbat magma jebol dan kolom letusan menembus belasan kilometer ke langit. Dentumannya terdengar jauh melampaui radius bahaya.",
-    locationLabel: "Puncak gunung api aktif, Busur Vulkanik",
-    roundEffect:
-      "Kepanikan menjalar: warga di sektor terdampak otomatis menjadi Panik pada awal ronde.",
-    roundEffectKey: "panic_spread",
-    affectedSectorIds: ["merah"],
-    endEffect: "Satu ubin di sektor terdampak dihantam material — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
-  },
-  {
-    id: "dis_vul_02",
-    category: "vulkanik",
-    title: "Awan Panas Piroklastik",
-    description:
-      "Campuran gas dan abu bersuhu ratusan derajat meluncur menuruni lereng lebih cepat daripada kendaraan. Ini bahaya vulkanik yang paling mematikan.",
-    locationLabel: "Alur lereng selatan, Busur Vulkanik",
-    roundEffect:
-      "Lereng tidak bisa dilewati rombongan: tidak ada aksi Evakuasi masuk maupun keluar sektor terdampak.",
-    roundEffectKey: "block_escort",
-    affectedSectorIds: ["merah"],
-    endEffect: "Satu ubin di sektor terdampak hangus — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
-  },
-  {
-    id: "dis_vul_03",
-    category: "vulkanik",
-    title: "Hujan Abu Pekat",
-    description:
-      "Abu halus menutup langit sampai siang terasa seperti malam. Ia melumpuhkan mesin, menyumbat saluran napas, dan membuat atap runtuh oleh beratnya.",
-    locationLabel: "Kawasan angin bawah, Busur Salju & Tsunami",
-    roundEffect:
-      "Jarak pandang nyaris nol: Kartu Evidence kategori [WHERE] tidak bisa dipakai ronde ini.",
-    roundEffectKey: "block_where",
-    affectedSectorIds: ["teal"],
-    endEffect: "Satu ubin di sektor terdampak tertimbun abu — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
-  },
-  {
-    id: "dis_vul_04",
-    category: "vulkanik",
-    title: "Satwa Turun Gunung",
-    description:
-      "Monyet, ular, dan babi hutan meninggalkan lereng bersamaan. Tanah memanas dan gas keluar lebih deras — hewan pergi sebelum manusia sempat rapat.",
-    locationLabel: "Lereng atas seluruh busur vulkanik",
-    roundEffect:
-      "Alam memberi peringatan lebih dulu: tim boleh mengintip 1 Kartu Bencana teratas ronde ini.",
-    roundEffectKey: "peek_disaster",
+      "Ash blots out the sun. Visibility drops to a few metres, every breath is grit, and the weight of it starts collapsing roofs.",
+    locationLabel: "All sectors",
+    roundEffect: "Every move between tiles costs 1 extra AP.",
+    roundEffectKey: "move_penalty",
     affectedSectorIds: [],
-    endEffect: "Tidak ada kerusakan ubin. Gunakan waktu pinjaman ini dengan baik.",
+    endEffect: "The most crowded tile on the ring takes damage.",
+    damageTarget: "most_villagers",
+  },
+  {
+    id: "dis_vol_02",
+    category: "volcanic",
+    title: "Pyroclastic Flow",
+    description:
+      "A collapsing eruption column races downslope as a ground-hugging cloud of gas and rock at several hundred degrees. Nothing outruns it.",
+    locationLabel: "Volcano slopes",
+    roundEffect:
+      "Every villager in the affected sector panics at the start of this round.",
+    roundEffectKey: "panic_spread",
+    affectedSectorIds: ["sunda", "philippine"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
+    damageTarget: "affected_sector",
+  },
+  {
+    id: "dis_vol_03",
+    category: "volcanic",
+    title: "Wildlife Comes Down the Mountain",
+    description:
+      "Birds first, then the larger animals, moving downhill in numbers. The instruments agree with them: gas output on the summit is climbing.",
+    locationLabel: "Forest slopes",
+    roundEffect:
+      "A favourable read: the team may look at the top card of the Disaster deck before it is drawn.",
+    roundEffectKey: "peek_disaster",
+    affectedSectorIds: ["south_pacific", "andes"],
+    endEffect: "No tile is damaged, but the eruption is measurably closer.",
     damageTarget: "none",
   },
-
-  // ——————————————————————————————————————————————————————————————————
-  // OSEANOGRAFI — Rute Laut tertutup total saat kartu ini aktif
-  // ——————————————————————————————————————————————————————————————————
   {
-    id: "dis_ose_01",
-    category: "oseanografi",
-    title: "Tsunami Jarak Jauh",
+    id: "dis_vol_04",
+    category: "volcanic",
+    title: "Lava Cuts the Evacuation Road",
     description:
-      "Gempa besar di seberang samudra melahirkan gelombang yang menyeberangi laut terbuka berjam-jam lamanya, lalu meninggi saat mencapai perairan dangkal.",
-    locationLabel: "Seluruh pesisir cincin",
+      "A flow front crosses the main road at walking pace. It is slow, it is not survivable to cross, and it is not going to stop.",
+    locationLabel: "Volcano slopes",
     roundEffect:
-      "Semua pesisir siaga: keluar dari sektor mana pun memerlukan +1 AP, dan Rute Laut tertutup.",
+      "No villager can be escorted into or out of the affected sector this round.",
+    roundEffectKey: "block_escort",
+    affectedSectorIds: ["sunda"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
+    damageTarget: "affected_sector",
+  },
+
+  // ——— OCEANIC (these close the Sea Lane) ————————————————————————————
+  {
+    id: "dis_oce_01",
+    category: "oceanic",
+    title: "Tsunami Warning: Sea Withdrawing",
+    description:
+      "The water is pulling back off the shelf far past any low tide. The trough of the wave arrives first; the crest is behind it.",
+    locationLabel: "Coastlines",
+    roundEffect:
+      "Leaving a coastal sector costs 1 extra AP. The Sea Lane is closed — nobody crosses open water today.",
     roundEffectKey: "coast_exit_penalty",
+    affectedSectorIds: ["hokkaido", "south_pacific"],
+    endEffect: "The affected sector's most crowded tile is swept and takes damage.",
+    damageTarget: "affected_sector",
+  },
+  {
+    id: "dis_oce_02",
+    category: "oceanic",
+    title: "Distant Tsunami Inbound",
+    description:
+      "A rupture on the far side of the ocean sent a wave train across it overnight. It has been travelling at the speed of a jet and it arrives on a schedule nobody can negotiate with.",
+    locationLabel: "All coastlines",
+    roundEffect:
+      "Guardians cannot barter Evidence this round — the networks are saturated with warnings. The Sea Lane is closed.",
+    roundEffectKey: "block_trade",
     affectedSectorIds: [],
-    endEffect:
-      "Ubin dengan warga terbanyak disapu gelombang — Retak, atau Hancur bila sudah Retak.",
+    endEffect: "The most crowded tile on the ring takes damage.",
     damageTarget: "most_villagers",
   },
   {
-    id: "dis_ose_02",
-    category: "oseanografi",
-    title: "Gelombang Pasang Cepat",
+    id: "dis_oce_03",
+    category: "oceanic",
+    title: "Storm Surge and Extreme Abrasion",
     description:
-      "Pasang purnama bertemu gelombang badai. Air naik jauh melewati batas biasa dan bertahan berjam-jam sebelum surut.",
-    locationLabel: "Pesisir rendah Busur Kepulauan Vulkanik",
+      "Wave after wave chews the foundations out from under the coastal road. The shoreline is not where the map says it is any more.",
+    locationLabel: "Coastlines",
     roundEffect:
-      "Jalan pesisir terendam: keluar dari sektor terdampak memerlukan +1 AP, dan Rute Laut tertutup.",
-    roundEffectKey: "coast_exit_penalty",
-    affectedSectorIds: ["biru"],
-    endEffect: "Satu ubin di sektor terdampak terendam — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
-  },
-  {
-    id: "dis_ose_03",
-    category: "oseanografi",
-    title: "Tsunami Lokal",
-    description:
-      "Pusat gempanya dekat, sehingga gelombang pertama tiba hanya beberapa menit setelah guncangan. Tidak ada waktu untuk menunggu pengumuman.",
-    locationLabel: "Teluk sempit Busur Salju & Tsunami",
-    roundEffect:
-      "Warga di sektor terdampak otomatis menjadi Panik pada awal ronde. Rute Laut tertutup.",
-    roundEffectKey: "panic_spread",
-    affectedSectorIds: ["teal"],
-    endEffect: "Satu ubin di sektor terdampak disapu air — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
-  },
-  {
-    id: "dis_ose_04",
-    category: "oseanografi",
-    title: "Abrasi Ekstrem",
-    description:
-      "Gelombang beruntun mengikis kaki tebing pantai sampai bibirnya runtuh. Garis pantai bergeser puluhan meter dalam semalam.",
-    locationLabel: "Pesisir Valparaíso hingga selatan",
-    roundEffect:
-      "Jalan pantai rontok sebagian: semua perpindahan memerlukan +1 AP. Rute Laut tertutup.",
+      "Every move between tiles costs 1 extra AP. The Sea Lane is closed.",
     roundEffectKey: "move_penalty",
-    affectedSectorIds: ["kuning"],
-    endEffect: "Satu ubin di sektor terdampak longsor ke laut — Retak, atau Hancur bila sudah Retak.",
+    affectedSectorIds: ["andes", "philippine"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
+    damageTarget: "affected_sector",
+  },
+  {
+    id: "dis_oce_04",
+    category: "oceanic",
+    title: "Submarine Eruption",
+    description:
+      "A volcano erupts beneath the sea. The pressure wave circles the planet and the water above the vent turns to steam and ash.",
+    locationLabel: "Island arcs",
+    roundEffect:
+      "Every villager in the affected sector panics at the start of this round. The Sea Lane is closed.",
+    roundEffectKey: "panic_spread",
+    affectedSectorIds: ["south_pacific", "philippine"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
     damageTarget: "affected_sector",
   },
 
-  // ——————————————————————————————————————————————————————————————————
-  // ATMOSFERIK
-  // ——————————————————————————————————————————————————————————————————
+  // ——— ATMOSPHERIC ————————————————————————————————————————————————
   {
     id: "dis_atm_01",
-    category: "atmosferik",
-    title: "Badai Tropis",
+    category: "atmospheric",
+    title: "Extreme Storm",
     description:
-      "Angin kencang dan hujan tanpa jeda selama berjam-jam. Atap terbang, pohon tumbang, dan suara badai menelan setiap instruksi yang diteriakkan.",
-    locationLabel: "Kepulauan Filipina hingga Pasifik Selatan",
-    roundEffect:
-      "Suara tenggelam oleh badai: biaya Menenangkan naik menjadi 3 AP ronde ini.",
+      "Rain and thunder drown out every voice. A Guardian shouting instructions ten metres away cannot be heard at all.",
+    locationLabel: "All sectors",
+    roundEffect: "Calming a villager costs 3 AP instead of 2 this round.",
     roundEffectKey: "calm_cost_up",
-    affectedSectorIds: ["biru"],
-    endEffect: "Satu ubin di sektor terdampak porak-poranda — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
+    affectedSectorIds: [],
+    endEffect: "No tile is damaged, but exhaustion carries into the next round.",
+    damageTarget: "none",
   },
   {
     id: "dis_atm_02",
-    category: "atmosferik",
-    title: "Blackout Jaringan",
+    category: "atmospheric",
+    title: "Communications Blackout",
     description:
-      "Listrik dan menara telekomunikasi padam bersamaan. Justru saat informasi paling dibutuhkan, semua orang kembali ke desas-desus mulut ke mulut.",
-    locationLabel: "Seluruh cincin",
+      "Masts are down and the cables are cut. No internet, no broadcast, no way to check anything against a source that is not standing next to you.",
+    locationLabel: "All sectors",
     roundEffect:
-      "Tidak ada sinyal untuk berkoordinasi: aksi Barter tidak bisa dilakukan ronde ini.",
-    roundEffectKey: "block_trade",
+      "WHERE-category Evidence cannot be played this round — there is no network to search on.",
+    roundEffectKey: "block_where",
     affectedSectorIds: [],
-    endEffect: "Tidak ada kerusakan fisik ubin — kerusakannya ada pada arus informasi.",
+    endEffect: "No tile is damaged, but the region is cut off from official news.",
     damageTarget: "none",
   },
   {
     id: "dis_atm_03",
-    category: "atmosferik",
-    title: "Cuaca Ekstrem",
+    category: "atmospheric",
+    title: "Gridlock on the Evacuation Route",
     description:
-      "Suhu anjlok, kabut tebal, dan hujan es turun bergantian dalam satu hari. Pengungsi di tempat terbuka kehabisan tenaga jauh lebih cepat.",
-    locationLabel: "Dataran tinggi Kamchatka hingga Andes",
-    roundEffect:
-      "Semua orang kedinginan dan gelisah: biaya Menenangkan naik menjadi 3 AP ronde ini.",
-    roundEffectKey: "calm_cost_up",
-    affectedSectorIds: ["teal", "kuning"],
-    endEffect: "Satu ubin di sektor terdampak rusak oleh cuaca — Retak, atau Hancur bila sudah Retak.",
-    damageTarget: "affected_sector",
+      "Everyone acted on the same rumour at the same moment and took their own vehicle. The main road is now a very long car park.",
+    locationLabel: "All sectors",
+    roundEffect: "Guardians cannot barter Evidence this round — nobody can reach anybody.",
+    roundEffectKey: "block_trade",
+    affectedSectorIds: [],
+    endEffect: "No tile is damaged, but the delay compounds.",
+    damageTarget: "none",
   },
   {
     id: "dis_atm_04",
-    category: "atmosferik",
-    title: "Kemacetan Evakuasi",
+    category: "atmospheric",
+    title: "Whiteout Blizzard",
     description:
-      "Semua orang bergerak ke arah yang sama pada menit yang sama. Jalur yang dirancang untuk menyelamatkan justru berubah menjadi perangkap tanpa gerak.",
-    locationLabel: "Jalur keluar utama Busur Vulkanik",
-    roundEffect:
-      "Antrean mengular di setiap simpang: semua perpindahan memerlukan +1 AP ronde ini.",
+      "Wind-driven snow erases the horizon. Landmarks disappear, and the path you walked an hour ago is gone.",
+    locationLabel: "Northern sectors",
+    roundEffect: "Every move between tiles costs 1 extra AP.",
     roundEffectKey: "move_penalty",
-    affectedSectorIds: ["merah"],
-    endEffect:
-      "Tidak ada kerusakan ubin, tetapi waktu yang hilang tidak pernah kembali.",
-    damageTarget: "none",
+    affectedSectorIds: ["hokkaido", "cascadia"],
+    endEffect: "The affected sector's most crowded tile takes damage.",
+    damageTarget: "affected_sector",
   },
 ];
 
@@ -257,23 +246,14 @@ export const disasterCardById: Record<string, DisasterCard> = Object.fromEntries
   disasterCards.map((c) => [c.id, c])
 );
 
-export const disasterCardsByCategory: Record<DisasterCategory, DisasterCard[]> = {
-  tektonik: disasterCards.filter((c) => c.category === "tektonik"),
-  vulkanik: disasterCards.filter((c) => c.category === "vulkanik"),
-  oseanografi: disasterCards.filter((c) => c.category === "oseanografi"),
-  atmosferik: disasterCards.filter((c) => c.category === "atmosferik"),
-};
-
-/**
- * Dek Bencana sepanjang `size` kartu (18 / 16 / 14 sesuai level kesulitan).
- * Urutan kanonik dan deterministik — reducer yang mengocok dengan PRNG berbenih.
- * Bila size > jumlah kartu unik, daftar diulang dari awal.
- */
+/** The deck is the game clock — `size` cards drawn from the 16, shuffled by the engine. */
 export function buildDisasterDeck(size: number): string[] {
-  const ids: string[] = [];
-  if (size <= 0 || disasterCards.length === 0) return ids;
-  for (let i = 0; i < size; i++) {
-    ids.push(disasterCards[i % disasterCards.length].id);
+  const ids = disasterCards.map((c) => c.id);
+  const out: string[] = [];
+  let i = 0;
+  while (out.length < size) {
+    out.push(ids[i % ids.length]);
+    i++;
   }
-  return ids;
+  return out;
 }

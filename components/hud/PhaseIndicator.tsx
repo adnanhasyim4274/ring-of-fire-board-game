@@ -2,7 +2,7 @@
 import { motion } from "framer-motion";
 import type { GamePhase } from "@/engine/types";
 import { cn } from "@/lib/utils";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /** Lima fase per ronde: Bencana -> Berita -> Giliran -> Sidang -> Dampak. */
 export const PHASE_ORDER = [

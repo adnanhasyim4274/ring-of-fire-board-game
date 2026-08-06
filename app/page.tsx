@@ -5,18 +5,16 @@ import { BookOpen, Play } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { Button } from "@/components/ui/Button";
 import { useHydrated } from "@/lib/useHydrated";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 import { roleEmoji } from "@/lib/roleEmoji";
 import { SECTOR_COLOR } from "@/lib/theme";
 import { CENTRE, RING_RADIUS, VIEWBOX, tileHexPoints } from "@/lib/ring";
 
-const RING_SIZE = 28;
-const POS_SIAGA = [0, 7, 14, 21];
+const RING_SIZE = 24;
+const READY_POSTS = [0, 4, 8, 12, 16, 20];
 const SECTOR_OF = (i: number) => {
-  if (i < 7) return "merah" as const;
-  if (i < 14) return "teal" as const;
-  if (i < 21) return "kuning" as const;
-  return "biru" as const;
+  const order = ["sunda", "philippine", "hokkaido", "cascadia", "andes", "south_pacific"] as const;
+  return order[Math.floor(i / 4) % 6];
 };
 
 export default function HomePage() {
@@ -34,7 +32,7 @@ export default function HomePage() {
             <polygon
               key={i}
               points={tileHexPoints(i, RING_SIZE)}
-              fill={POS_SIAGA.includes(i) ? "#2B2F38" : SECTOR_COLOR[SECTOR_OF(i)]}
+              fill={READY_POSTS.includes(i) ? "#2B2F38" : SECTOR_COLOR[SECTOR_OF(i)]}
               stroke="#00000033"
               strokeWidth={4}
             />

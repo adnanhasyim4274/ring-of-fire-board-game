@@ -1,17 +1,16 @@
 "use client";
 import type { ReactNode } from "react";
 import type { GameState, Scenario } from "@/engine/types";
-import { isSeaRouteOpen, type MoveOption } from "@/lib/engineBridge";
+import { isSeaLaneOpen, type MoveOption } from "@/lib/engineBridge";
 import {
   CENTRE,
   CENTRE_RADIUS,
   RING_RADIUS,
   VIEWBOX,
-  seaRouteLabelPoint,
-  seaRoutePath,
+  seaLanePath,
 } from "@/lib/ring";
-import { CENTRE_COLOR, SEA_ROUTE_COLOR } from "@/lib/theme";
-import { id } from "@/lib/i18n/id";
+import { CENTRE_COLOR, SEA_LANE_COLOR } from "@/lib/theme";
+import { en as id } from "@/lib/i18n/en";
 import { RingTile } from "./RingTile";
 
 export function RingBoard({
@@ -31,11 +30,13 @@ export function RingBoard({
   centre?: ReactNode;
 }) {
   const ringSize = scenario.ringSize;
-  // Bukan `state.seaRouteOpen` mentah: bencana Oseanografi menutup Rute Laut
+  const [seaA, seaB] = scenario.seaLaneEndpoints ?? [0, Math.floor(ringSize / 2)];
+  const seaLaneIdx = scenario.seaLaneIndices ?? [];
+  // Bukan `state.seaLaneOpen` mentah: bencana Oseanografi menutup Rute Laut
   // tanpa mengubah bendera itu, dan papan harus ikut menunjukkannya.
-  const seaOpen = isSeaRouteOpen(state);
-  const rimTargets = new Set(moveOptions.filter((m) => !m.viaSeaRoute).map((m) => m.index));
-  const seaTargets = new Set(moveOptions.filter((m) => m.viaSeaRoute).map((m) => m.index));
+  const seaOpen = isSeaLaneOpen(state);
+  const rimTargets = new Set(moveOptions.filter((m) => !m.viaSeaLane).map((m) => m.index));
+  const seaTargets = new Set(moveOptions.filter((m) => m.viaSeaLane).map((m) => m.index));
 
   return (
     <div className="overflow-x-auto rounded-3xl border border-black/10 bg-gradient-to-b from-[#12293b] to-[#07141f] p-2 shadow-inner">
@@ -69,45 +70,50 @@ export function RingBoard({
             opacity={0.45}
           />
 
-          {/* Rute Laut — 4 busur ungu putus-putus yang MENGITARI Zona Krisis */}
-          <g>
-            {scenario.seaRoutes.map(([a, b]) => {
-              const path = seaRoutePath(a, b, ringSize);
-              const lab = seaRouteLabelPoint(a, b, ringSize);
-              return (
-                <g key={`sea-${a}-${b}`}>
-                  <path
-                    d={path}
-                    fill="none"
-                    stroke={SEA_ROUTE_COLOR}
-                    strokeWidth={seaOpen ? 7 : 5}
-                    strokeLinecap="round"
-                    strokeDasharray="20 14"
-                    opacity={seaOpen ? 0.95 : 0.3}
-                    className={seaOpen ? "sea-flow" : undefined}
-                  />
-                  {!seaOpen && (
-                    <line
-                      x1={lab.x - 22}
-                      y1={lab.y - 22}
-                      x2={lab.x + 22}
-                      y2={lab.y + 22}
-                      stroke="#ef4444"
-                      strokeWidth={6}
-                      strokeLinecap="round"
-                    />
-                  )}
-                </g>
-              );
-            })}
-          </g>
+          {/* Sea Lane — the straight chord the 3 purple tiles sit on */}
+          <path
+            d={seaLanePath(seaA, seaB, ringSize)}
+            fill="none"
+            stroke={SEA_LANE_COLOR}
+            strokeWidth={seaOpen ? 8 : 5}
+            strokeLinecap="round"
+            strokeDasharray="22 14"
+            opacity={seaOpen ? 0.9 : 0.28}
+            className={seaOpen ? "sea-flow" : undefined}
+          />
+          {!seaOpen && (
+            <g>
+              <line
+                x1={CENTRE - 30}
+                y1={CENTRE - 30}
+                x2={CENTRE + 30}
+                y2={CENTRE + 30}
+                stroke="#ef4444"
+                strokeWidth={7}
+                strokeLinecap="round"
+              />
+              <line
+                x1={CENTRE + 30}
+                y1={CENTRE - 30}
+                x2={CENTRE - 30}
+                y2={CENTRE + 30}
+                stroke="#ef4444"
+                strokeWidth={7}
+                strokeLinecap="round"
+              />
+            </g>
+          )}
 
-          {/* 28 ubin heksagon */}
+          {/* 27 hex tiles: 24 on the rim, 3 on the Sea Lane */}
           {state.tiles.map((tile) => (
             <RingTile
               key={tile.index}
               tile={tile}
               ringSize={ringSize}
+              seaLaneOrder={seaLaneIdx.indexOf(tile.index)}
+              seaLaneCount={seaLaneIdx.length}
+              seaLaneEndpoints={[seaA, seaB]}
+              seaLaneOpen={seaOpen}
               regionName={scenario.regionNames[tile.index]}
               players={state.players.filter((p) => p.position === tile.index)}
               isSelected={selectedTile === tile.index}
@@ -119,20 +125,13 @@ export function RingBoard({
           ))}
         </svg>
 
-        {/* Isi Zona Krisis — overlay HTML supaya teksnya bisa dipilih & dibaca screen reader */}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div
-            className="pointer-events-auto flex flex-col items-center justify-center gap-1 overflow-hidden text-center"
-            style={{ width: "31%", height: "31%" }}
-          >
-            {centre ?? (
-              <p className="text-[10px] font-bold leading-tight text-sky-200/70">
-                {id.board.crisisZoneEmpty}
-              </p>
-            )}
-          </div>
-        </div>
       </div>
+
+      {/* The Sea Lane now runs through the middle of the ring, so the Crisis
+          Zone content sits beneath the board instead of being overlaid on it. */}
+      {centre && (
+        <div className="mt-1 flex flex-col items-center gap-1 px-2 text-center">{centre}</div>
+      )}
 
       <BoardLegend seaOpen={seaOpen} />
     </div>
@@ -162,7 +161,7 @@ function BoardLegend({ seaOpen }: { seaOpen: boolean }) {
       swatch: <span className="inline-block h-3 w-3 border-2 border-zinc-500 bg-zinc-800 text-[8px] leading-none text-red-400">✕</span>,
     },
     {
-      label: seaOpen ? id.hud.seaRouteOpen : id.hud.seaRouteClosed,
+      label: seaOpen ? id.hud.seaLaneOpen : id.hud.seaRouteClosed,
       swatch: <span className="inline-block h-0.5 w-4 bg-sea" />,
     },
   ];

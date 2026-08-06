@@ -2,7 +2,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ShieldOff, Skull } from "lucide-react";
 import { chaosCardById } from "@/data/chaosCards";
-import { id } from "@/lib/i18n/id";
+import { en as id } from "@/lib/i18n/en";
 
 /**
  * Kartu Chaos aktif — debuff permanen tim, ditarik setiap kali verifikasi gagal.

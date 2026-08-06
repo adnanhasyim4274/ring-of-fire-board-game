@@ -25,14 +25,15 @@ import { chaosCardById } from "@/data/chaosCards";
 import { rewardCardById } from "@/data/rewardCards";
 import {
   BARTER_COST,
-  DIFFICULTY_PRESETS,
+  DISASTER_DECK_SIZE,
   INVESTIGATE_COST,
+  PANIC_METER_MAX,
   STARTING_HAND,
   SUB_MISSION_REPUTATION,
   allNeighbors,
   applyChaos,
   areRimAdjacent,
-  areSeaRouteLinked,
+  areSeaLaneLinked,
   calmCost,
   checkGameOver,
   escortBlocked,
@@ -42,7 +43,7 @@ import {
   hasChaos,
   isCategoryBlocked,
   isPassable,
-  isSeaRouteOpen,
+  isSeaLaneOpen,
   maxEscortGroup,
   moveCost,
   mulberry32,
@@ -53,7 +54,7 @@ import {
   sectorTiles,
   shuffled,
   startingAp,
-  stepTowardNearestPosSiaga,
+  stepTowardNearestReadyPost,
 } from "./rules";
 
 // ——— Loose data views (the data lane owns these modules) ————————————————
@@ -100,7 +101,7 @@ function applyGameOverCheck(s: GameState, endOfRound = false) {
   if (result.over) {
     s.phase = "game_over";
     s.gameOverReason = result.reason!;
-    log(s, `Permainan berakhir: ${result.reason}.`);
+    log(s, `Game over: ${result.reason}.`);
   }
 }
 
@@ -112,7 +113,7 @@ function drawEvidence(s: GameState, player: Player): boolean {
     if (s.discards.evidence.length > 0) {
       s.decks.evidence = shuffled(s.discards.evidence, nextSeed(s));
       s.discards.evidence = [];
-      log(s, "Tumpukan buang Evidence dikocok ulang menjadi dek baru.");
+      log(s, "The Evidence discard pile was reshuffled into a fresh deck.");
     } else {
       s.decks.evidence = shuffled(buildEvidenceDeck(), nextSeed(s));
     }
@@ -128,7 +129,7 @@ function drawNewsId(s: GameState): string | null {
     const pool = s.discards.news.length > 0 ? s.discards.news : Object.keys(newsMap);
     s.decks.news = shuffled(pool, nextSeed(s));
     s.discards.news = [];
-    log(s, "Dek Berita dikocok ulang.");
+    log(s, "The News deck was reshuffled.");
   }
   return s.decks.news.shift() ?? null;
 }
@@ -145,17 +146,17 @@ function drawChaosId(s: GameState): string | null {
 // ——— Villagers & tiles ————————————————————————————————————————————————
 
 function calmVillager(v: VillagerToken) {
-  if (v.status === "panik") v.status = "tenang";
+  if (v.status === "panicked") v.status = "calm";
 }
 
 /** 🦎 Komodo — Aura Otoritas: no auto-panic on the tile they are standing on. */
 function panicTile(s: GameState, tile: TileState) {
   const grounded = s.players.some((p) => p.position === tile.index && hasAbility(p, "suppress"));
   if (grounded) {
-    log(s, "Aura Otoritas Komodo menahan kepanikan di ubin itu.");
+    log(s, "Steady Herd holds the panic on that tile.");
     return;
   }
-  for (const v of tile.occupants) if (v.status === "tenang") v.status = "panik";
+  for (const v of tile.occupants) if (v.status === "calm") v.status = "panicked";
 }
 
 function allSectorIds(s: GameState): SectorId[] {
@@ -178,15 +179,15 @@ function pickMostVillagers(candidates: TileState[]): TileState | undefined {
 /** 2-stage damage: 0 -> 1 Retak -> 2 Hancur. Pos Siaga never takes damage. */
 function damageTile(s: GameState, index: number) {
   const tile = s.tiles[index];
-  if (!tile || tile.isPosSiaga || tile.damage >= 2) return;
+  if (!tile || tile.isReadyPost || tile.damage >= 2) return;
   tile.damage = (tile.damage + 1) as TileDamage;
   if (tile.damage === 1) {
-    log(s, `Ubin ${index} RETAK — biaya masuk naik.`);
+    log(s, `Tile ${index} is CRACKED — entering it now costs more.`);
     return;
   }
   const lost = [...tile.occupants];
   for (const v of lost) {
-    v.status = "hilang";
+    v.status = "lost";
     s.casualties.push(v);
   }
   tile.occupants = [];
@@ -194,8 +195,8 @@ function damageTile(s: GameState, index: number) {
   log(
     s,
     lost.length > 0
-      ? `Ubin ${index} HANCUR — ${lost.length} warga hilang!`
-      : `Ubin ${index} HANCUR — untungnya tidak ada warga di sana.`
+      ? `Tile ${index} is DESTROYED — ${lost.length} lost!`
+      : `Tile ${index} is DESTROYED — thankfully nobody was on it.`
   );
   for (const p of s.players) {
     if (p.position !== index) continue;
@@ -207,11 +208,11 @@ function damageTile(s: GameState, index: number) {
   }
 }
 
-/** Chaos "Eksodus Panik": villagers wander to a random neighbouring tile. */
+/** Chaos "Panic Exodus": villagers wander to a random neighbouring tile. */
 function driftVillagers(s: GameState, count: number) {
   const rng = mulberry32(nextSeed(s));
   for (let k = 0; k < count; k++) {
-    const movable = s.tiles.filter((t) => !t.isPosSiaga && t.occupants.length > 0);
+    const movable = s.tiles.filter((t) => !t.isReadyPost && t.occupants.length > 0);
     if (movable.length === 0) return;
     const tile = movable[Math.floor(rng() * movable.length)];
     const options = allNeighbors(s, tile.index).filter((n) => isPassable(s.tiles[n]));
@@ -220,14 +221,14 @@ function driftVillagers(s: GameState, count: number) {
     const villager = tile.occupants.shift();
     if (!villager) continue;
     villager.tileIndex = target.index;
-    if (target.isPosSiaga) {
-      villager.status = "selamat";
+    if (target.isReadyPost) {
+      villager.status = "rescued";
       s.evacuees.push(villager);
     } else {
       target.occupants.push(villager);
     }
   }
-  log(s, "Eksodus Panik — warga berpindah tanpa arah.");
+  log(s, "Panic Exodus — villagers scatter with no direction.");
 }
 
 // ——— Sub-missions ——————————————————————————————————————————————————————
@@ -238,7 +239,7 @@ function bumpSubMission(s: GameState, player: Player, key: string, amount = 1) {
   player.subMissionProgress += amount;
 }
 
-/** 🦧 "Kolektor Epistemologi" is a snapshot condition, so re-evaluate on hand change. */
+/** 🦧 "Epistemic Collector" is a snapshot condition, so re-evaluate on hand change. */
 function refreshCollector(s: GameState) {
   for (const p of s.players) {
     const role = roleOf(p);
@@ -257,7 +258,7 @@ function awardSubMissions(s: GameState) {
     p.subMissionDone = true;
     s.reputation += SUB_MISSION_REPUTATION;
     s.stats.subMissionsDone += 1;
-    log(s, `Sub-Misi "${role.subMissionName}" selesai — +${SUB_MISSION_REPUTATION} Reputasi!`);
+    log(s, `Sub-Mission "${role.subMissionName}" complete — +${SUB_MISSION_REPUTATION} Reputation!`);
   }
 }
 
@@ -267,8 +268,8 @@ function moveVillagerTo(s: GameState, villager: VillagerToken, fromTile: TileSta
   fromTile.occupants = fromTile.occupants.filter((v) => v.id !== villager.id);
   const target = s.tiles[toIndex];
   villager.tileIndex = toIndex;
-  if (target?.isPosSiaga) {
-    villager.status = "selamat";
+  if (target?.isReadyPost) {
+    villager.status = "rescued";
     s.evacuees.push(villager);
   } else if (target) {
     target.occupants.push(villager);
@@ -282,10 +283,10 @@ function applyNewsEffect(s: GameState, effect: NewsEffect | undefined) {
 
   if (effect.panic) {
     if (s.panicShield) {
-      log(s, "Ketahanan Mental menahan Meter Kepanikan ronde ini.");
+      log(s, "Mental Fortitude holds the Panic Meter this round.");
     } else {
       s.panicMeter += effect.panic;
-      log(s, `Meter Kepanikan naik ke ${s.panicMeter}.`);
+      log(s, `The Panic Meter climbs to ${s.panicMeter}.`);
     }
   }
   if (effect.panicTargetSector && sectorId) {
@@ -293,24 +294,24 @@ function applyNewsEffect(s: GameState, effect: NewsEffect | undefined) {
   }
   if (effect.calmTargetSector && sectorId) {
     for (const t of sectorTiles(s, sectorId)) t.occupants.forEach(calmVillager);
-    log(s, "Informasi yang benar menenangkan warga di sektor target.");
+    log(s, "Good information calms the target sector.");
   }
   if (effect.lockEvacuationSector && sectorId) {
     for (const t of sectorTiles(s, sectorId)) t.evacuationLocked = true;
-    log(s, "Evakuasi di sektor target terkunci satu ronde.");
+    log(s, "Evacuation in the target sector is locked for one round.");
   }
   if (effect.apPenaltyFirstPlayer) {
     const first = s.players[s.firstPlayerIndex];
     if (first) {
       s.pendingApBonus[first.id] = (s.pendingApBonus[first.id] ?? 0) - effect.apPenaltyFirstPlayer;
-      log(s, `${first.name} kehilangan ${effect.apPenaltyFirstPlayer} AP ronde berikutnya.`);
+      log(s, `${first.name} loses ${effect.apPenaltyFirstPlayer} AP next round.`);
     }
   }
-  if (effect.stepTowardPosSiaga && tile) {
-    const step = stepTowardNearestPosSiaga(s, tile.index);
+  if (effect.stepTowardReadyPost && tile) {
+    const step = stepTowardNearestReadyPost(s, tile.index);
     if (step !== null) {
       for (const v of [...tile.occupants]) moveVillagerTo(s, v, tile, step);
-      log(s, "Warga bergerak satu langkah menuju Pos Siaga terdekat.");
+      log(s, "Villagers step once toward the nearest Ready Post.");
     }
   }
   if (effect.removeCrisisToken && tile) {
@@ -320,7 +321,7 @@ function applyNewsEffect(s: GameState, effect: NewsEffect | undefined) {
     for (const p of s.players) {
       s.pendingApBonus[p.id] = (s.pendingApBonus[p.id] ?? 0) + effect.apBonus;
     }
-    log(s, `Semua pemain mendapat +${effect.apBonus} AP ronde berikutnya.`);
+    log(s, `Every Guardian gets +${effect.apBonus} AP next round.`);
   }
   if (effect.drawEvidence) {
     for (const p of s.players) {
@@ -344,15 +345,15 @@ function enterTurnsPhase(s: GameState) {
   s.pendingApBonus = {};
   s.playersEndedTurn = [];
   s.currentPlayerIndex = s.firstPlayerIndex;
-  log(s, "Fase 3 — Giliran Pemain. Belanjakan Action Point kalian!");
+  log(s, "Phase 3 — Guardian Turns. Spend your Action Points!");
 }
 
 function enterVerdictPhase(s: GameState) {
   s.phase = "p4_verdict";
-  // "Evakuasi terkunci" lasts exactly one round; it expires here, before a new
+  // "Evacuation locked" lasts exactly one round; it expires here, before a new
   // Fase 4 can set it again.
   for (const t of s.tiles) t.evacuationLocked = false;
-  log(s, "Fase 4 — Sidang Fakta. Buka gembok, ucapkan vonis, lalu balik kartunya.");
+  log(s, "Phase 4 — The Verdict. Open the locks, commit, then flip the card.");
 }
 
 /** Commit & Flip resolution — the heart of the game. */
@@ -364,33 +365,33 @@ function resolveFlip(s: GameState) {
   s.lastOutcome = outcome;
   const tile = s.newsTileIndex !== null ? s.tiles[s.newsTileIndex] : null;
 
-  if (outcome === "terverifikasi") {
+  if (outcome === "verified") {
     s.reputation += 1;
-    s.stats.terverifikasi += 1;
+    s.stats.verified += 1;
     if (news.truth === "hoax") s.stats.hoaxDebunked += 1;
     else s.stats.factsValidated += 1;
     if (tile) tile.hasCrisisToken = false;
-    log(s, `TERVERIFIKASI — "${news.title}" ternyata ${news.truth.toUpperCase()}. +1 Poin Reputasi.`);
+    log(s, `VERIFIED — "${news.title}" was ${news.truth.toUpperCase()}. +1 Reputation.`);
     applyNewsEffect(s, news.ifValidated);
-  } else if (outcome === "tebakan_beruntung") {
-    s.stats.tebakanBeruntung += 1;
+  } else if (outcome === "lucky_guess") {
+    s.stats.luckyGuess += 1;
     log(
       s,
-      `TEBAKAN BERUNTUNG — vonis kalian benar, tapi gemboknya belum lengkap. ` +
-        `Tidak ada Poin Reputasi, Token Krisis tetap di papan.`
+      `LUCKY GUESS — your verdict was right, but the locks were not both open. ` +
+        `No Reputation, and the Crisis Token stays on the board.`
     );
   } else {
-    s.stats.hoaksMenyebar += 1;
+    s.stats.rumourSpreads += 1;
     if (s.panicShield) {
-      log(s, "HOAKS MENYEBAR — tapi Ketahanan Mental menahan Meter Kepanikan ronde ini.");
+      log(s, "RUMOUR SPREADS — but Mental Fortitude holds the Panic Meter this round.");
     } else {
       s.panicMeter += 1;
-      log(s, `HOAKS MENYEBAR — Meter Kepanikan naik ke ${s.panicMeter}.`);
+      log(s, `RUMOUR SPREADS — the Panic Meter climbs to ${s.panicMeter}.`);
     }
     const chaosId = drawChaosId(s);
     if (chaosId) {
       const card = applyChaos(s, chaosId);
-      if (card) log(s, `Kartu Chaos: "${card.title}" — ${card.description}`);
+      if (card) log(s, `Chaos card: "${card.title}" — ${card.description}`);
     }
     applyNewsEffect(s, news.ifIgnored);
   }
@@ -402,13 +403,13 @@ function applyDisasterDamage(s: GameState) {
   if (!d || d.damageTarget === "none") return;
   const targets: number[] = [];
   if (d.damageTarget === "most_villagers") {
-    const t = pickMostVillagers(s.tiles.filter((x) => !x.isPosSiaga && x.damage < 2));
+    const t = pickMostVillagers(s.tiles.filter((x) => !x.isReadyPost && x.damage < 2));
     if (t) targets.push(t.index);
   } else {
     const sectors = d.affectedSectorIds?.length ? d.affectedSectorIds : allSectorIds(s);
     for (const sec of sectors) {
       const t = pickMostVillagers(
-        s.tiles.filter((x) => x.sectorId === sec && !x.isPosSiaga && x.damage < 2)
+        s.tiles.filter((x) => x.sectorId === sec && !x.isReadyPost && x.damage < 2)
       );
       if (t && !targets.includes(t.index)) targets.push(t.index);
     }
@@ -427,7 +428,7 @@ function enterImpactPhase(s: GameState) {
   if (s.phase === "game_over") return;
 
   s.phase = "p5_impact";
-  log(s, "Fase 5 — Dampak & Eskalasi.");
+  log(s, "Phase 5 — Impact & Escalation.");
   applyDisasterDamage(s);
   if (hasChaos(s, "villager_drift")) driftVillagers(s, 2);
   refreshCollector(s);
@@ -450,7 +451,7 @@ function startNextRound(s: GameState) {
   s.panicShield = false;
   s.playersEndedTurn = [];
   s.peek = null;
-  s.seaRouteOpen = true;
+  s.seaLaneOpen = true;
   for (const p of s.players) {
     p.activeUsedThisRound = false;
     p.altRouteReady = false;
@@ -458,22 +459,29 @@ function startNextRound(s: GameState) {
   }
   s.phase = "p1_disaster";
   const first = s.players[s.firstPlayerIndex];
-  log(s, `Ronde ${s.round} dimulai. Pemain pertama: ${first ? first.name : "-"}.`);
+  log(s, `Round ${s.round} begins. First player: ${first ? first.name : "-"}.`);
   applyGameOverCheck(s);
 }
 
 // ——— START_GAME ————————————————————————————————————————————————————————
 
 function buildTiles(scenario: Scenario): TileState[] {
-  const size = scenario.ringSize || scenario.layout?.length || 28;
-  const posSiaga = new Set(scenario.posSiagaIndices ?? []);
+  // Every tile, rim AND Sea Lane — the layout array is the source of truth for
+  // length (27), while `ringSize` (24) governs rim arithmetic only.
+  const size = scenario.layout?.length || scenario.ringSize || 27;
+  const readyPosts = new Set(scenario.readyPostIndices ?? []);
+  const seaLane = new Set(scenario.seaLaneIndices ?? []);
   const sectorOf = (i: number): SectorId | null =>
     (scenario.sectors ?? []).find((sec) => sec.tileIndices.includes(i))?.id ?? null;
   return Array.from({ length: size }, (_, index) => ({
     index,
-    typeId: scenario.layout?.[index] ?? (posSiaga.has(index) ? "pos_siaga" : "sektor"),
-    sectorId: posSiaga.has(index) ? null : sectorOf(index),
-    isPosSiaga: posSiaga.has(index),
+    typeId:
+      scenario.layout?.[index] ??
+      (readyPosts.has(index) ? "ready_post" : seaLane.has(index) ? "sea_lane" : "sector"),
+    // Ready Posts and Sea Lane tiles belong to no sector.
+    sectorId: readyPosts.has(index) || seaLane.has(index) ? null : sectorOf(index),
+    isReadyPost: readyPosts.has(index),
+    isSeaLane: seaLane.has(index),
     damage: 0 as TileDamage,
     occupants: [],
     hasCrisisToken: false,
@@ -486,16 +494,16 @@ function seedVillagers(scenario: Scenario, tiles: TileState[]) {
   let placed = 0;
   const put = (index: number) => {
     const tile = tiles[index];
-    if (!tile || tile.isPosSiaga) return;
+    if (!tile || tile.isReadyPost) return;
     placed += 1;
-    tile.occupants.push({ id: `w${placed}`, status: "tenang", tileIndex: index });
+    tile.occupants.push({ id: `w${placed}`, status: "calm", tileIndex: index });
   };
   (scenario.villagerSetup ?? []).forEach((count, index) => {
     for (let k = 0; k < count && placed < total; k++) put(index);
   });
   // Fallback so the board is never empty if villagerSetup is missing/short.
   if (placed < total) {
-    const open = tiles.filter((t) => !t.isPosSiaga).map((t) => t.index);
+    const open = tiles.filter((t) => !t.isReadyPost).map((t) => t.index);
     let cursor = 0;
     while (placed < total && open.length > 0) {
       put(open[cursor % open.length]);
@@ -506,19 +514,18 @@ function seedVillagers(scenario: Scenario, tiles: TileState[]) {
 
 function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameState {
   const scenario = scenarioMap[action.scenarioId] ?? (Object.values(scenarioMap)[0] as Scenario);
-  const preset = DIFFICULTY_PRESETS[action.difficulty] ?? DIFFICULTY_PRESETS.awas;
   const seed = (action.seed ?? 1) >>> 0;
 
   const tiles = buildTiles(scenario);
   seedVillagers(scenario, tiles);
 
-  const posList = scenario.posSiagaIndices?.length ? scenario.posSiagaIndices : [0];
+  const posList = scenario.readyPostIndices?.length ? scenario.readyPostIndices : [0];
   const players: Player[] = action.players.map((p, i) => ({
     id: `p${i + 1}`,
     name:
       p.name.trim() ||
       (roleById as unknown as Record<string, { name?: string } | undefined>)[p.roleId]?.name ||
-      `Pemain ${i + 1}`,
+      `Player ${i + 1}`,
     roleId: p.roleId,
     ap: 0,
     hand: [],
@@ -535,14 +542,13 @@ function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameSta
     phase: "p1_disaster",
     round: 1,
     scenarioId: scenario.id,
-    difficulty: action.difficulty,
     players,
     currentPlayerIndex: 0,
     firstPlayerIndex: 0,
     playersEndedTurn: [],
     tiles,
     panicMeter: 0,
-    panicMeterMax: preset.panicMeterMax,
+    panicMeterMax: PANIC_METER_MAX,
     reputation: 0,
     activeDisaster: null,
     activeNews: null,
@@ -552,9 +558,9 @@ function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameSta
     newsRevealed: false,
     lastOutcome: null,
     decks: {
-      disaster: shuffled(buildDisasterDeck(preset.disasterDeckSize), seed + 3).slice(
+      disaster: shuffled(buildDisasterDeck((scenario.disasterDeckSize ?? DISASTER_DECK_SIZE)), seed + 3).slice(
         0,
-        preset.disasterDeckSize
+        (scenario.disasterDeckSize ?? DISASTER_DECK_SIZE)
       ),
       news: shuffled(Object.keys(newsMap), seed + 1),
       evidence: shuffled(buildEvidenceDeck(), seed + 2),
@@ -568,9 +574,9 @@ function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameSta
     gameOverReason: null,
     log: [],
     stats: {
-      terverifikasi: 0,
-      tebakanBeruntung: 0,
-      hoaksMenyebar: 0,
+      verified: 0,
+      luckyGuess: 0,
+      rumourSpreads: 0,
       hoaxDebunked: 0,
       factsValidated: 0,
       subMissionsDone: 0,
@@ -578,7 +584,7 @@ function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameSta
     pendingApBonus: {},
     panicShield: false,
     peek: null,
-    seaRouteOpen: true,
+    seaLaneOpen: true,
     rngSeed: seed,
   };
 
@@ -607,8 +613,8 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (s.phase !== "p1_disaster" || s.activeDisaster) return state;
       if (s.decks.disaster.length === 0) {
         s.phase = "game_over";
-        s.gameOverReason = "waktu";
-        log(s, "Dek Bencana habis — megathrust datang. Waktu habis.");
+        s.gameOverReason = "timeout";
+        log(s, "The Disaster deck is empty — the megathrust arrives. Out of time.");
         return s;
       }
       const id = s.decks.disaster.shift()!;
@@ -617,18 +623,18 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       s.activeDisaster = card;
       s.discards.disaster.push(id);
       // Rute Laut tertutup total saat bencana Oseanografi.
-      s.seaRouteOpen = card.category !== "oseanografi";
+      s.seaLaneOpen = card.category !== "oceanic";
       log(s, `Bencana: "${card.title}" — ${card.roundEffect}`);
-      if (!s.seaRouteOpen) log(s, "Rute Laut TERTUTUP ronde ini.");
+      if (!s.seaLaneOpen) log(s, "The Sea Lane is CLOSED this round.");
 
       if (card.roundEffectKey === "panic_spread") {
         const sectors = card.affectedSectorIds?.length ? card.affectedSectorIds : allSectorIds(s);
         for (const sec of sectors) for (const t of sectorTiles(s, sec)) panicTile(s, t);
-        log(s, "Rentetan gempa susulan — warga di sektor terdampak panik.");
+        log(s, "Aftershock swarm — villagers in the affected sector panic.");
       }
       if (card.roundEffectKey === "peek_disaster" && s.decks.disaster.length > 0) {
         s.peek = { kind: "disaster", cardId: s.decks.disaster[0] };
-        log(s, "Satwa turun gunung — tim boleh mengintip Kartu Bencana berikutnya.");
+        log(s, "Wildlife comes down the mountain — the team may peek at the next Disaster Card.");
       }
       return s;
     }
@@ -647,16 +653,16 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       s.lastOutcome = null;
 
       const inSector = s.tiles.filter(
-        (t) => t.sectorId === card.targetSectorId && !t.isPosSiaga && t.damage < 2
+        (t) => t.sectorId === card.targetSectorId && !t.isReadyPost && t.damage < 2
       );
-      const pool = inSector.length > 0 ? inSector : s.tiles.filter((t) => !t.isPosSiaga && t.damage < 2);
+      const pool = inSector.length > 0 ? inSector : s.tiles.filter((t) => !t.isReadyPost && t.damage < 2);
       const target = pickMostVillagers(pool);
       s.newsTileIndex = target ? target.index : null;
       log(s, `Berita masuk: "${card.title}" (${card.category}).`);
       if (target) {
         target.hasCrisisToken = true;
         panicTile(s, target);
-        log(s, `Token Krisis diletakkan di ubin ${target.index} — warga di sana panik.`);
+        log(s, `A Crisis Token lands on tile ${target.index} — everyone there panics.`);
       }
       return s;
     }
@@ -670,25 +676,25 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const to = action.targetTileIndex;
       const target = s.tiles[to];
       if (!target || !isPassable(target)) return state;
-      const viaSea = !!action.viaSeaRoute;
+      const viaSea = !!action.viaSeaLane;
       if (viaSea) {
-        if (!isSeaRouteOpen(s)) {
-          log(s, "Rute Laut tertutup ronde ini.");
+        if (!isSeaLaneOpen(s)) {
+          log(s, "The Sea Lane is closed this round.");
           return s;
         }
-        if (!areSeaRouteLinked(s, player.position, to)) return state;
+        if (!areSeaLaneLinked(s, player.position, to)) return state;
       } else if (!areRimAdjacent(s, player.position, to)) {
         return state;
       }
       const cost = moveCost(s, player.position, to, player, viaSea);
       if (player.ap < cost) {
-        log(s, `AP tidak cukup untuk bergerak (butuh ${cost}).`);
+        log(s, `Not enough AP to move (needs ${cost}).`);
         return s;
       }
       const rawCost = moveCost(s, player.position, to, { ...player, altRouteReady: false }, viaSea);
       if (player.altRouteReady && rawCost > cost) {
         player.altRouteReady = false;
-        log(s, `${player.name} memakai Jalur Alternatif — penalti diabaikan.`);
+        log(s, `${player.name} takes an alternate route — penalty ignored.`);
       }
       player.ap -= cost;
       player.position = to;
@@ -704,16 +710,16 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const tile = s.tiles[player.position];
       const villager = tile?.occupants.find((v) => v.id === action.villagerId);
       if (!villager) return state;
-      if (villager.status !== "panik") return state;
+      if (villager.status !== "panicked") return state;
       const cost = calmCost(s);
       if (player.ap < cost) {
-        log(s, `AP tidak cukup untuk menenangkan (butuh ${cost}).`);
+        log(s, `Not enough AP to calm (needs ${cost}).`);
         return s;
       }
       player.ap -= cost;
-      villager.status = "tenang";
+      villager.status = "calm";
       bumpSubMission(s, player, "calm_six", 1);
-      log(s, `${player.name} menenangkan seorang warga (${cost} AP).`);
+      log(s, `${player.name} calms a villager (${cost} AP).`);
       return s;
     }
 
@@ -726,13 +732,13 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const to = action.targetTileIndex;
       const target = s.tiles[to];
       if (!from || !target || !isPassable(target)) return state;
-      const viaSea = !!action.viaSeaRoute;
+      const viaSea = !!action.viaSeaLane;
       if (viaSea) {
-        if (!isSeaRouteOpen(s)) {
-          log(s, "Rute Laut tertutup ronde ini.");
+        if (!isSeaLaneOpen(s)) {
+          log(s, "The Sea Lane is closed this round.");
           return s;
         }
-        if (!areSeaRouteLinked(s, player.position, to)) return state;
+        if (!areSeaLaneLinked(s, player.position, to)) return state;
       } else if (!areRimAdjacent(s, player.position, to)) {
         return state;
       }
@@ -741,7 +747,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (ids.length === 0) return state;
       const limit = maxEscortGroup(player, viaSea);
       if (ids.length > limit) {
-        log(s, `Maksimal ${limit} warga per aksi Mengawal.`);
+        log(s, `You can escort at most ${limit} villagers at once.`);
         return s;
       }
       const group: VillagerToken[] = [];
@@ -750,12 +756,12 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         if (!v) return state;
         group.push(v);
       }
-      if (group.some((v) => v.status !== "tenang")) {
-        log(s, "Warga yang panik tidak mau ikut — tenangkan mereka dulu!");
+      if (group.some((v) => v.status !== "calm")) {
+        log(s, "Panicking villagers will not follow — calm them first!");
         return s;
       }
       if (escortBlocked(s, from, target)) {
-        log(s, "Evakuasi di jalur itu terkunci ronde ini.");
+        log(s, "Evacuation along that route is locked this round.");
         return s;
       }
       // Rumor yang belum dibongkar mengunci evakuasi: warga terlalu gaduh untuk
@@ -765,8 +771,8 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (from.hasCrisisToken) {
         log(
           s,
-          "Warga menolak digiring — kabar di ubin ini belum terbukti benar atau salah. " +
-            "Bongkar dulu kabarnya!"
+          "They refuse to be led — the story on this tile is still unproven. " +
+            "Settle the story first!"
         );
         return s;
       }
@@ -775,7 +781,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       // 🐯 Tactical Escort: a dedicated +1 AP usable only for evacuation.
       const pool = hasAbility(player, "tactical_escort") ? Math.min(player.escortBonusAp, cost) : 0;
       if (player.ap < cost - pool) {
-        log(s, `AP tidak cukup untuk mengawal (butuh ${cost}).`);
+        log(s, `Not enough AP to escort (needs ${cost}).`);
         return s;
       }
       const rawCost = escortCost(s, player.position, to, { ...player, altRouteReady: false }, viaSea);
@@ -786,18 +792,18 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const fromCrisis = from.hasCrisisToken;
       for (const v of group) {
         moveVillagerTo(s, v, from, to);
-        if (target.isPosSiaga && fromCrisis) bumpSubMission(s, player, "rescue_crisis", 1);
+        if (target.isReadyPost && fromCrisis) bumpSubMission(s, player, "rescue_crisis", 1);
       }
       player.position = to;
-      if (target.isPosSiaga) {
+      if (target.isReadyPost) {
         log(
           s,
-          `${player.name} mengantar ${group.length} warga ke Pos Siaga — SELAMAT! ` +
+          `${player.name} brings ${group.length} to a Ready Post — SAFE! ` +
             `(${s.evacuees.length} terselamatkan)`
         );
         applyGameOverCheck(s);
       } else {
-        log(s, `${player.name} mengawal ${group.length} warga ke ubin ${to} (${cost} AP).`);
+        log(s, `${player.name} escorts ${group.length} to tile ${to} (${cost} AP).`);
       }
       return s;
     }
@@ -808,13 +814,13 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const active = currentPlayer(s);
       if (!player || !active || player.id !== active.id) return state;
       if (player.ap < INVESTIGATE_COST) {
-        log(s, `AP tidak cukup untuk investigasi (butuh ${INVESTIGATE_COST}).`);
+        log(s, `Not enough AP to investigate (needs ${INVESTIGATE_COST}).`);
         return s;
       }
       player.ap -= INVESTIGATE_COST;
       drawEvidence(s, player);
       refreshCollector(s);
-      log(s, `${player.name} berinvestigasi dan menarik 1 Kartu Evidence.`);
+      log(s, `${player.name} investigates and draws 1 Evidence card.`);
       return s;
     }
 
@@ -827,24 +833,24 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const card = evidenceMap[action.evidenceId];
       if (!player || !card) return state;
       if (!news.locks.includes(action.lock)) {
-        log(s, `Kartu Berita ini tidak punya gembok [${action.lock}].`);
+        log(s, `This News Card has no [${action.lock}] lock.`);
         return s;
       }
       if (s.locksOpened.includes(action.lock)) {
-        log(s, `Gembok [${action.lock}] sudah terbuka.`);
+        log(s, `The [${action.lock}] lock is already open.`);
         return s;
       }
       if (isCategoryBlocked(s, action.lock)) {
-        log(s, `Gembok [${action.lock}] tidak bisa dibuka ronde ini.`);
+        log(s, `The [${action.lock}] lock cannot be opened this round.`);
         return s;
       }
       if (isCategoryBlocked(s, card.category)) {
-        log(s, `Evidence kategori ${card.category} sedang tidak bisa dipakai.`);
+        log(s, `${card.category} evidence cannot be used right now.`);
         return s;
       }
       const matches = card.isWildcard || card.category === action.lock;
       if (!matches) {
-        log(s, `"${card.title}" (${card.category}) tidak cocok dengan gembok [${action.lock}].`);
+        log(s, `"${card.title}" (${card.category}) does not fit the [${action.lock}] lock.`);
         return s;
       }
       if (!removeFromHand(player, card.id)) return state;
@@ -861,7 +867,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         const v = nearestPanickedVillager(s, player.position);
         if (v) {
           calmVillager(v);
-          log(s, "Penjelasan yang jernih menenangkan warga panik terdekat.");
+          log(s, "A clear explanation calms the nearest panicking villager.");
         }
       }
       // 🐒 Katalisator Informasi: a bartered card used to crack the news this round.
@@ -880,14 +886,14 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (!player || !card) return state;
       const roundKey = s.activeDisaster?.roundEffectKey;
       if (card.resourceKind === "trade" && roundKey === "block_trade") {
-        log(s, "Kemacetan total — kartu tidak bisa ditukar ronde ini.");
+        log(s, "Total gridlock — cards cannot be swapped this round.");
         return s;
       }
       if (
         (card.resourceKind === "ap2" || card.resourceKind === "alt_route") &&
         roundKey === "no_evidence_move"
       ) {
-        log(s, "Ronde ini Evidence tidak bisa dibuang untuk pergerakan.");
+        log(s, "Evidence cannot be discarded for movement this round.");
         return s;
       }
       if (!removeFromHand(player, card.id)) return state;
@@ -927,19 +933,19 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               if (found) v = found;
             }
           }
-          if (!v || v.status !== "panik") v = nearestPanickedVillager(s, player.position);
+          if (!v || v.status !== "panicked") v = nearestPanickedVillager(s, player.position);
           if (v) {
             calmVillager(v);
             bumpSubMission(s, player, "calm_six", 1);
-            log(s, `${player.name} memakai Pengeras Suara — 1 warga tenang (0 AP).`);
+            log(s, `${player.name} uses the loudspeaker — 1 villager calms down (0 AP).`);
           } else {
-            log(s, "Tidak ada warga panik untuk ditenangkan.");
+            log(s, "Nobody here is panicking.");
           }
           break;
         }
         case "panic_shield": {
           s.panicShield = true;
-          log(s, `${player.name} memperkuat Ketahanan Mental — Meter Kepanikan tidak naik ronde ini.`);
+          log(s, `${player.name} steadies the team — the Panic Meter holds this round.`);
           break;
         }
       }
@@ -955,16 +961,16 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (!player || !active || player.id !== active.id) return state;
       if (!other || other.id === player.id) return state;
       if (s.activeDisaster?.roundEffectKey === "block_trade") {
-        log(s, "Kemacetan total — barter tidak bisa dilakukan ronde ini.");
+        log(s, "Total gridlock — no bartering this round.");
         return s;
       }
       // 🐒 Sinyal Repeater: Monyet barters at any range; everyone else must share a tile.
       if (!hasAbility(player, "network_sync") && player.position !== other.position) {
-        log(s, "Barter hanya bisa dengan pemain di ubin yang sama.");
+        log(s, "Barter only works with a player on the same tile.");
         return s;
       }
       if (player.ap < BARTER_COST) {
-        log(s, `AP tidak cukup untuk barter (butuh ${BARTER_COST}).`);
+        log(s, `Not enough AP to barter (needs ${BARTER_COST}).`);
         return s;
       }
       if (!player.hand.includes(action.giveCardId) || !other.hand.includes(action.takeCardId)) {
@@ -986,7 +992,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const player = findPlayer(s, action.playerId);
       if (!player) return state;
       if (player.activeUsedThisRound) {
-        log(s, `${player.name} sudah memakai Kemampuan Aktif ronde ini.`);
+        log(s, `${player.name} already used their Active ability this round.`);
         return s;
       }
       const role = roleOf(player);
@@ -997,7 +1003,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           const which = action.deck === "news" ? "news" : "disaster";
           const deck = which === "news" ? s.decks.news : s.decks.disaster;
           if (deck.length === 0) {
-            log(s, "Dek itu kosong — tidak ada yang bisa diintip.");
+            log(s, "That deck is empty — nothing to peek at.");
             return s;
           }
           s.peek = { kind: which, cardId: deck[0] };
@@ -1010,7 +1016,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           const lock = action.lock;
           if (!news || !lock || ids.length < 2) return state;
           if (!news.locks.includes(lock) || s.locksOpened.includes(lock)) {
-            log(s, `Gembok [${lock}] tidak tersedia.`);
+            log(s, `There is no [${lock}] lock on this card.`);
             return s;
           }
           const snapshot = [...player.hand];
@@ -1020,7 +1026,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           }
           s.discards.evidence.push(...ids.slice(0, 2));
           s.locksOpened.push(lock);
-          log(s, `${player.name} (Orangutan) Data Mining — gembok [${lock}] dibuka paksa!`);
+          log(s, `${player.name} (Japanese Macaque) mines the archive — the [${lock}] lock is forced open!`);
           refreshCollector(s);
           break;
         }
@@ -1052,8 +1058,8 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           let calmed = 0;
           for (const v of tile?.occupants ?? []) {
             if (calmed >= 3) break;
-            if (v.status === "panik") {
-              v.status = "tenang";
+            if (v.status === "panicked") {
+              v.status = "calm";
               calmed += 1;
             }
           }
@@ -1065,8 +1071,8 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           if (tile) tile.hasCrisisToken = false;
           log(
             s,
-            `${player.name} (Komodo) Menekan Histeria — ${calmed} warga jadi tenang` +
-              (hadCrisis ? ", Token Krisis di ubin ini dicabut." : ".")
+            `${player.name} (Andean Llama) calms the crowd — ${calmed} villagers settle` +
+              (hadCrisis ? ", and the Crisis Token here is lifted." : ".")
           );
           break;
         }
@@ -1097,9 +1103,9 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         bumpSubMission(s, player, "map_damaged", 1);
       }
       // Pos Siaga bonus stage.
-      if (tile?.isPosSiaga) {
+      if (tile?.isReadyPost) {
         s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
-        log(s, `${player.name} beristirahat di Pos Siaga — +1 AP ronde berikutnya.`);
+        log(s, `${player.name} rests at a Ready Post — +1 AP next round.`);
       }
 
       if (!s.playersEndedTurn.includes(player.id)) s.playersEndedTurn.push(player.id);
@@ -1133,7 +1139,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (s.phase !== "p4_verdict") return state;
       if (!s.activeNews || s.newsRevealed) return state;
       if (s.verdict === null) {
-        log(s, "Ucapkan vonis dulu sebelum membalik kartu.");
+        log(s, "Commit a verdict before you flip the card.");
         return s;
       }
       resolveFlip(s);
@@ -1146,20 +1152,20 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const card = rewardMap[action.rewardId];
       if (!card) return state;
       if (s.ownedRewards.includes(card.id)) {
-        log(s, `"${card.title}" sudah dimiliki tim.`);
+        log(s, `"${card.title}" is already owned.`);
         return s;
       }
       if (s.reputation < card.cost) {
-        log(s, `Poin Reputasi tidak cukup untuk "${card.title}" (butuh ${card.cost}).`);
+        log(s, `Not enough Reputation for "${card.title}" (needs ${card.cost}).`);
         return s;
       }
       s.reputation -= card.cost;
       s.ownedRewards.push(card.id);
-      log(s, `Tim membeli "${card.title}" (-${card.cost} Reputasi).`);
+      log(s, `The team buys "${card.title}" (-${card.cost} Reputation).`);
       if (card.effectKey === "clear_chaos" && s.activeChaos.length > 0) {
         const removed = s.activeChaos.shift()!;
         const removedCard = chaosMap[removed];
-        log(s, `Klinik Lapangan menebus Kartu Chaos "${removedCard?.title ?? removed}".`);
+        log(s, `The Field Clinic buys off the Chaos card "${removedCard?.title ?? removed}".`);
       }
       return s;
     }
@@ -1169,7 +1175,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         case "p1_disaster":
           if (!s.activeDisaster) return state;
           s.phase = "p2_news";
-          log(s, "Fase 2 — Kabar Mengudara.");
+          log(s, "Phase 2 — Breaking News.");
           return s;
         case "p2_news":
           if (!s.activeNews) return state;
@@ -1198,13 +1204,13 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
     // ——— Debug / playtest ————————————————————————————————————————————
     case "DEBUG_SET_PANIC": {
       s.panicMeter = Math.max(0, Math.min(s.panicMeterMax, action.value));
-      log(s, `[debug] Meter Kepanikan = ${s.panicMeter}.`);
+      log(s, `[debug] Panic Meter = ${s.panicMeter}.`);
       applyGameOverCheck(s);
       return s;
     }
     case "DEBUG_SET_REPUTATION": {
       s.reputation = Math.max(0, action.value);
-      log(s, `[debug] Poin Reputasi = ${s.reputation}.`);
+      log(s, `[debug] Reputation = ${s.reputation}.`);
       return s;
     }
     case "DEBUG_SET_PHASE": {
@@ -1214,7 +1220,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         s.phase = action.phase;
       }
       if (s.phase !== "game_over") s.gameOverReason = null;
-      log(s, `[debug] Fase = ${action.phase}.`);
+      log(s, `[debug] Phase = ${action.phase}.`);
       return s;
     }
     case "DEBUG_SET_NEWS_TOP": {
@@ -1229,7 +1235,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
     }
     case "DEBUG_TRIM_DISASTER_DECK": {
       s.decks.disaster = s.decks.disaster.slice(0, 1);
-      log(s, "[debug] Dek Bencana dipangkas menjadi 1 kartu.");
+      log(s, "[debug] Disaster deck trimmed to 1 card.");
       return s;
     }
 
