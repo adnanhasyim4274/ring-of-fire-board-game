@@ -1,11 +1,16 @@
 "use client";
 import { motion } from "framer-motion";
-import { Sparkles, Target, Zap } from "lucide-react";
 import type { Player, Role } from "@/engine/types";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
+import {
+  AbilityIcon,
+  iconForActive,
+  iconForPassive,
+  iconForSubMission,
+} from "@/lib/roleIcons";
 
 /** Kartu Peran: Pasif selalu aktif, Aktif 1x per ronde, Sub-Misi pribadi. */
 export function RolePanel({
@@ -22,6 +27,9 @@ export function RolePanel({
   const target = Math.max(1, role.subMissionTarget);
   const progress = Math.min(player.subMissionProgress, target);
   const pct = (progress / target) * 100;
+
+  // One glyph per ability, so two Guardians never read the same at a glance.
+  const iconSize = "h-3.5 w-3.5 shrink-0";
 
   return (
     <section
@@ -49,7 +57,7 @@ export function RolePanel({
 
       <div className="rounded-xl bg-zinc-50 p-2">
         <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-zinc-500">
-          <Sparkles className="h-3 w-3" />
+          <AbilityIcon icon={iconForPassive(role.id)} className={iconSize} />
           {id.role.passive} · {role.passiveName}
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-zinc-700">{role.passive}</p>
@@ -57,7 +65,7 @@ export function RolePanel({
 
       <div className="rounded-xl border-2 border-violet-200 bg-violet-50 p-2">
         <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
-          <Zap className="h-3 w-3" />
+          <AbilityIcon icon={iconForActive(role.activeKey)} className={iconSize} />
           {id.role.active} · {role.activeName}
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-violet-900">{role.active}</p>
@@ -84,7 +92,7 @@ export function RolePanel({
         )}
       >
         <p className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-amber-800">
-          <Target className="h-3 w-3" />
+          <AbilityIcon icon={iconForSubMission(role.subMissionKey)} className={iconSize} />
           {id.role.subMission} · {role.subMissionName}
         </p>
         <p className="mt-0.5 text-[11px] leading-snug text-amber-950">{role.subMission}</p>

@@ -39,6 +39,7 @@ export const en = {
     playNow: "Start the Mission",
     continueGame: "Continue Game",
     howToPlay: "How to Play",
+    watchHowToPlay: "Watch how to play",
     passAndPlay: "One device · pass and play · 2–6 Guardians",
     demoNote: "This is a digital demo. The physical board game is the real product.",
     pillars: [
@@ -75,30 +76,35 @@ export const en = {
 
   phases: {
     p1_disaster: {
+      doNow: "Reveal the Disaster card, then read its round effect before anyone plans a move.",
       num: "1",
       name: "The Ring of Fire's Wrath",
       short: "Disaster",
       hint: "Reveal 1 Disaster Card. Its effect rewrites the rules for this whole round.",
     },
     p2_news: {
+      doNow: "Reveal the News card and note which region just took a Crisis Token.",
       num: "2",
       name: "Breaking News",
       short: "News",
       hint: "Reveal 1 News Card. Everyone on the target tile panics immediately.",
     },
     p3_turns: {
+      doNow: "Spend your 4 AP, then end your turn and pass the device to the next Guardian.",
       num: "3",
       name: "Guardian Turns",
       short: "Turns",
       hint: "4 AP each. Move, calm, escort, investigate, play evidence.",
     },
     p4_verdict: {
+      doNow: "Agree out loud on HOAX, FACT or ABSTAIN, commit it, and only then flip the card.",
       num: "4",
       name: "The Verdict",
       short: "Verdict",
       hint: "Open both locks, commit your verdict out loud, then flip the card.",
     },
     p5_impact: {
+      doNow: "Check the damage, spend Reputation if you can afford it, then start the next round.",
       num: "5",
       name: "Impact & Escalation",
       short: "Impact",
@@ -268,6 +274,10 @@ export const en = {
   },
 
   evidence: {
+    spendOnly: "No lock for this",
+    spendOnlyWhy: "Neither lock on this News card takes this category, so this card can only be spent or traded this round.",
+    lockOpen: "Lock already open",
+    lockOpenWhy: "A lock opens once. Spend or trade this copy instead.",
     hand: "Evidence",
     handLimit: "Hand limit",
     empty: "Your hand is empty. Investigate to draw a card.",
@@ -456,46 +466,121 @@ export const en = {
   },
 
   /**
-   * Shown once before the first round so a new player can picture a turn
-   * before being asked to take one. Reopenable from the board at any time.
+   * Playtesters reported that they were still working out the rules after five
+   * rounds, and that the How to Play page did not help because it lives on the
+   * home screen and not inside the game. So every player is treated as a new
+   * player: the tutorial opens on the board, offers a guided or a hands-off
+   * watch mode, and can be skipped in one tap.
    */
-  primer: {
-    open: "Rules",
-    title: "How a round works",
-    subtitle:
-      "Sixty seconds of reading, then you can play. You are Wildlife Guardians on the Pacific Ring of Fire, and you win or lose as one table.",
-    goalLabel: "Your goal",
-    goalBody:
-      "Move enough villagers to a Ready Post before the Disaster deck runs out. The target scales with the size of your table, and the counter at the top of the board always shows the one you need.",
-    roundLabel: "Every round runs these five phases, in this order",
+  tutorial: {
+    open: "How to play",
+    reopen: "Rules",
+    skip: "Skip",
+    back: "Back",
+    next: "Next",
+    done: "Start playing",
+    stepOf: "Step {n} of {total}",
+    pause: "Pause",
+    resume: "Resume",
+    watching: "Playing by itself",
+
+    pick: {
+      title: "First time on the Ring of Fire?",
+      body: "About a minute now, and you will know exactly what each of the five phases is going to ask of you.",
+      guided: "Guide me step by step",
+      guidedNote: "Nine short cards, you control the pace",
+      watch: "Watch how to play",
+      watchNote: "It advances by itself, sit back for a minute",
+      skip: "Skip, I know how to play",
+    },
+
     steps: [
       {
-        n: "1",
-        title: "The Ring of Fire's Wrath",
-        body: "A Disaster card flips and rewrites this round's rules. Ocean disasters shut the Sea Lane through the middle of the board.",
+        tag: "The table",
+        title: "You are Wildlife Guardians",
+        body: "The Pacific Ring of Fire is waking up. Two to six of you play endemic animals, one from each corner of the Pacific, and the table wins or loses together. Nobody wins alone here.",
+        points: [
+          "24 tiles form a closed ring of six real Pacific regions",
+          "Six Ready Posts sit at the sector junctions. Those are the safe tiles",
+          "Three Sea Lane tiles cut through the middle as a shortcut, and close when the ocean turns",
+        ],
       },
       {
-        n: "2",
-        title: "Breaking News",
-        body: "A News card arrives. A Crisis Token lands on the region it names, and everybody standing there panics.",
+        tag: "The goal",
+        title: "Get people onto a Ready Post before the clock runs out",
+        body: "Eighteen villagers are scattered around the ring. The Disaster deck is your clock: twelve cards, twelve rounds. Move enough villagers to safety before it empties.",
+        points: [
+          "The target scales with your table: 12 villagers with 2 Guardians, 13 with 3, 15 with 4 or more",
+          "The counter at the top of the board always shows the number you need",
+          "You lose if the Panic Meter hits 6, if too few villagers are left, or if the deck empties first",
+        ],
       },
       {
-        n: "3",
-        title: "Guardian Turns",
-        body: "Four action points each. Move, calm a panicked villager, escort someone to safety, investigate, or play Evidence onto the news card's two 5W1H locks.",
+        tag: "Phase 1",
+        title: "A Disaster card rewrites the round",
+        body: "Every round opens with one. Its effect lasts the whole round, so read it before anyone plans a move. An oceanic disaster shuts the Sea Lane, which can strand a Guardian on the far side of the ring.",
+        points: [
+          "The effect applies to everyone, not just the player who revealed it",
+          "Some disasters make calming more expensive, others damage tiles",
+        ],
       },
       {
-        n: "4",
-        title: "The Verdict",
-        body: "The table commits to HOAX, FACT or ABSTAIN. Only then do you turn the card over and read the truth on the back.",
+        tag: "Phase 2",
+        title: "Breaking News lands, and it might be a lie",
+        body: "A News card names one region. A Crisis Token drops there and everybody standing on that tile panics at once.",
+        points: [
+          "While that token is unverified, nobody can be escorted off that tile",
+          "You cannot rescue your way past a rumour. You have to settle it first",
+          "Five of the sixteen News cards are true, so treating them all as fake will cost you",
+        ],
       },
       {
-        n: "5",
-        title: "Impact and Escalation",
-        body: "Damage is applied, reputation is spent, and the win and loss conditions are checked before the next round begins.",
+        tag: "Phase 3",
+        title: "Four action points each, then pass the device",
+        body: "On your turn you have 4 AP. Move for 1, calm a panicked villager for 2, escort someone for 1, investigate for 1, or play Evidence onto a lock for free.",
+        points: [
+          "Ending your turn on a Ready Post gives you +1 AP next round",
+          "You can also trade a card with another Guardian, or discard one for a resource",
+          "Hands are hidden, so say your reasoning out loud instead of just playing cards",
+        ],
+      },
+      {
+        tag: "The core choice",
+        title: "One Evidence card, two jobs, and you only get one",
+        body: "Every Evidence card can either open a 5W1H lock on the news, or be spent to act faster. Never both. This single choice is the whole game, and it is the thing most tables get wrong on their first play.",
+        points: [
+          "Each News card has exactly two locks, for example WHO and HOW",
+          "A card only fits a lock of its own category, unless it is a wildcard",
+          "A lock opens once. A second copy of the same category cannot open it again, so spend that one instead",
+        ],
+      },
+      {
+        tag: "Phase 4",
+        title: "Commit your verdict first, then flip the card",
+        body: "The table says HOAX, FACT or ABSTAIN out loud and locks it in. Only then do you turn the card over and read the truth printed on the back. Feedback always arrives after the decision, never before it.",
+        outcomes: true,
+      },
+      {
+        tag: "Phase 5",
+        title: "Damage is applied, then the round turns over",
+        body: "Tile damage lands, Reputation can be spent in the shop, and the win and loss conditions are checked. Then the next Disaster card comes up and it starts again.",
+        points: [
+          "Tiles take damage in two stages, so you get one round to react",
+          "Reputation buys one-off help, so do not hoard it to the end",
+        ],
+      },
+      {
+        tag: "Ready",
+        title: "That is the whole game",
+        body: "Two rules carry most of it, and they are worth saying once more before you start.",
+        points: [
+          "An Evidence card verifies OR accelerates. Never both",
+          "An unverified rumour locks evacuation out of a tile until you settle it",
+          "Being right by guessing earns nothing. Only the method scores",
+        ],
       },
     ],
-    outcomeLabel: "What the verdict earns you",
+
     outcomes: [
       {
         tag: "VERIFIED",
@@ -511,25 +596,20 @@ export const en = {
       },
       {
         tag: "RUMOUR SPREADS",
-        cond: "Wrong verdict, or you abstained",
+        cond: "Wrong verdict, or the table abstained",
         result: "+1 Panic, and you draw a Chaos card",
         tone: "bad" as const,
       },
     ],
-    keyLabel: "The two rules that decide most games",
-    keys: [
-      "An Evidence card can prove the news OR be spent to act faster. Never both. That single choice is the whole game.",
-      "While an unverified Crisis Token sits on a tile, nobody can be escorted off it. You cannot rescue your way past a rumour, you have to settle it first.",
-    ],
-    loseLabel: "You lose if",
-    lose: [
-      "The Panic Meter reaches 6",
-      "Too few villagers remain for the target to be reachable",
-      "The Disaster deck runs out before you hit the target",
-    ],
-    dontShow: "Do not show this again",
-    start: "Got it, begin Phase 1",
-    close: "Close",
+  },
+
+  /** Shown between turns so the table knows whose hands the device belongs in. */
+  turnSplash: {
+    pass: "Pass the device to",
+    yourTurn: "Your turn",
+    ap: "Action points",
+    tap: "Tap anywhere when you are holding it",
+    hiddenHand: "Your hand is yours alone. Do not show it to anyone.",
   },
 
   howTo: {

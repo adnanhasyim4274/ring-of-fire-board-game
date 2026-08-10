@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Sparkles, Target, Users, Zap } from "lucide-react";
+import { ArrowLeft, Users } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { roles } from "@/data/roles";
 import { scenarios } from "@/data/scenarios";
@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
+import {
+  AbilityIcon,
+  iconForActive,
+  iconForPassive,
+  iconForSubMission,
+} from "@/lib/roleIcons";
 
 interface Slot {
   name: string;
@@ -172,16 +178,26 @@ export default function SetupPage() {
 
                   {selected ? (
                     <span className="mt-1.5 block space-y-1 text-[11px] leading-snug">
+                      {/* Same glyphs as the in-game Role panel, learned before play. */}
                       <span className="block text-zinc-700">
-                        <Sparkles className="mr-1 inline h-3 w-3 text-zinc-400" />
+                        <AbilityIcon
+                          icon={iconForPassive(role.id)}
+                          className="mr-1 inline h-3.5 w-3.5 text-zinc-400"
+                        />
                         <b>{id.setup.rolePassive}</b> · {role.passive}
                       </span>
                       <span className="block text-violet-800">
-                        <Zap className="mr-1 inline h-3 w-3" />
+                        <AbilityIcon
+                          icon={iconForActive(role.activeKey)}
+                          className="mr-1 inline h-3.5 w-3.5"
+                        />
                         <b>{id.setup.roleActive}</b> · {role.active}
                       </span>
                       <span className="block text-amber-800">
-                        <Target className="mr-1 inline h-3 w-3" />
+                        <AbilityIcon
+                          icon={iconForSubMission(role.subMissionKey)}
+                          className="mr-1 inline h-3.5 w-3.5"
+                        />
                         <b>{id.setup.roleSubMission}</b> · {role.subMission}
                       </span>
                     </span>

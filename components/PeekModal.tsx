@@ -1,4 +1,6 @@
 "use client";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { Eye } from "lucide-react";
 import type { GameState, Scenario } from "@/engine/types";
 import { newsCardById } from "@/data/newsCards";
@@ -35,10 +37,50 @@ export function PeekModal({
         ? id.peek.news
         : id.peek.hand;
 
+  // Intip itu rahasia: kartu tidak pernah langsung nongol di layar. Pemegang
+  // giliran harus menekan "Reveal" dulu, supaya isinya tidak keburu terbaca
+  // meja saat modal terbuka.
+  const [revealed, setRevealed] = useState(false);
+
+  // Reset saat modal dibuka untuk intipan baru — pola "adjust state during
+  // render", tanpa effect (lihat app/play/page.tsx).
+  const [prevKey, setPrevKey] = useState<string | null>(null);
+  const peekKey = peek
+    ? `${peek.kind}-${peek.cardId ?? ""}-${peek.playerId ?? ""}`
+    : null;
+  if (peekKey !== prevKey) {
+    setPrevKey(peekKey);
+    setRevealed(false);
+  }
+
   return (
     <Modal open={!!peek} onClose={onClose}>
-      {peek && (
+      {peek && !revealed && (
         <div className="space-y-3">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-stone-50 p-6 text-center">
+            <Eye className="h-9 w-9 shrink-0 text-zinc-400" />
+            <span className="text-[10px] font-black uppercase tracking-wide text-zinc-500">
+              {label}
+            </span>
+            <h3 className="text-lg font-black leading-snug">{id.peek.title}</h3>
+            <p className="text-sm font-bold text-zinc-600">
+              Only you should see this — angle the screen away from the table
+              before you tap.
+            </p>
+          </div>
+
+          <Button className="w-full" onClick={() => setRevealed(true)}>
+            Reveal
+          </Button>
+        </div>
+      )}
+
+      {peek && revealed && (
+        <motion.div
+          className="space-y-3"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
           <h3 className="flex items-center gap-2 text-lg font-black">
             <Eye className="h-5 w-5 shrink-0" />
             {id.peek.title}
@@ -80,7 +122,7 @@ export function PeekModal({
           <Button className="w-full" onClick={onClose}>
             {id.peek.close}
           </Button>
-        </div>
+        </motion.div>
       )}
     </Modal>
   );

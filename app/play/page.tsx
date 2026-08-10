@@ -35,7 +35,7 @@ import { RingBoard } from "@/components/board/RingBoard";
 import { CrisisZoneCentre } from "@/components/board/CrisisZoneCentre";
 import { TileInspector } from "@/components/board/TileInspector";
 import { GameHud } from "@/components/hud/GameHud";
-import { PhaseIndicator, isRoundPhase } from "@/components/hud/PhaseIndicator";
+import { PhaseIndicator } from "@/components/hud/PhaseIndicator";
 import { DisasterCardReveal } from "@/components/cards/DisasterCardReveal";
 import { NewsCardDisplay } from "@/components/cards/NewsCardDisplay";
 import { EvidenceCardHand } from "@/components/cards/EvidenceCardHand";
@@ -49,7 +49,8 @@ import { BarterModal } from "@/components/BarterModal";
 import { ActiveAbilityModal } from "@/components/ActiveAbilityModal";
 import { PeekModal } from "@/components/PeekModal";
 import { GameOverModal } from "@/components/GameOverModal";
-import { RulesModal, useRulesPrimer } from "@/components/RulesModal";
+import { Tutorial, useTutorial } from "@/components/Tutorial";
+import { TurnSplash } from "@/components/TurnSplash";
 import { LogPanel } from "@/components/LogPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { Button } from "@/components/ui/Button";
@@ -68,15 +69,17 @@ export default function PlayPage() {
   const [barterCard, setBarterCard] = useState<EvidenceCard | null>(null);
   const [abilityOpen, setAbilityOpen] = useState(false);
 
-  // The rules primer opens by itself the first time, and stays reachable from
-  // the board afterwards. Reopening it deliberately is not a "first time", so
-  // it drops the "do not show again" checkbox.
+  // The tutorial opens by itself the first time and stays reachable from the
+  // board afterwards. Reopening it deliberately is not a "first time", so it
+  // skips the mode picker and goes straight to the cards.
   const {
-    open: primerOpen,
-    setOpen: setPrimerOpen,
-    dismiss: dismissPrimer,
-    firstTime: primerFirstTime,
-  } = useRulesPrimer();
+    open: tutorialOpen,
+    setOpen: setTutorialOpen,
+    dismiss: dismissTutorial,
+    firstTime: tutorialFirstTime,
+  } = useTutorial();
+  // Cleared on every phase/turn change below, so the splash appears once per turn.
+  const [splashDone, setSplashDone] = useState(false);
 
   useEffect(() => {
     if (mounted && !state) router.replace("/");
@@ -93,6 +96,7 @@ export default function PlayPage() {
     setHandRevealed(false);
     setBarterCard(null);
     setAbilityOpen(false);
+    setSplashDone(false);
   }
 
   const scenario = state ? scenarios.find((s) => s.id === state.scenarioId) ?? null : null;
@@ -186,27 +190,35 @@ export default function PlayPage() {
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => setPrimerOpen(true)}
+          onClick={() => setTutorialOpen(true)}
           className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900"
         >
           <BookOpen size={13} />
-          {id.primer.open}
+          {id.tutorial.reopen}
         </button>
       </div>
 
-      <RulesModal
-        open={primerOpen}
-        firstTime={primerFirstTime}
-        onDismiss={dismissPrimer}
+      <Tutorial
+        open={tutorialOpen}
+        firstTime={tutorialFirstTime}
+        onDismiss={dismissTutorial}
+      />
+
+      {/* Whose hands should be holding the device. Only worth showing when
+          there is somebody to pass it to, and never on top of the tutorial. */}
+      <TurnSplash
+        open={
+          !tutorialOpen &&
+          !splashDone &&
+          state.phase === "p3_turns" &&
+          state.players.length > 1
+        }
+        player={current}
+        role={role}
+        onDismiss={() => setSplashDone(true)}
       />
 
       <PhaseIndicator phase={state.phase} />
-
-      {isRoundPhase(state.phase) && (
-        <p className="px-1 text-center text-[11px] font-bold leading-snug text-zinc-500">
-          {id.phases[state.phase].hint}
-        </p>
-      )}
 
       {/* Dampak Kejadian bencana aktif */}
       {state.activeDisaster && state.phase !== "p1_disaster" && (

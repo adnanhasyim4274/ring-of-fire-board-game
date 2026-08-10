@@ -1,9 +1,11 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { BookOpen, Play } from "lucide-react";
+import { BookOpen, Play, PlayCircle } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { Button } from "@/components/ui/Button";
+import { Tutorial } from "@/components/Tutorial";
 import { useHydrated } from "@/lib/useHydrated";
 import { en as id } from "@/lib/i18n/en";
 import { roleEmoji } from "@/lib/roleEmoji";
@@ -21,6 +23,7 @@ export default function HomePage() {
   const state = useGameStore((s) => s.state);
   const hydrated = useHydrated();
   const hasSave = hydrated && state !== null && state.phase !== "game_over";
+  const [watching, setWatching] = useState(false);
 
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col items-center gap-6 p-6 pb-12 text-center lg:max-w-lg">
@@ -71,13 +74,30 @@ export default function HomePage() {
             {id.home.playNow}
           </Button>
         </Link>
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={() => setWatching(true)}
+        >
+          <PlayCircle className="mr-2 inline h-5 w-5" />
+          {id.home.watchHowToPlay}
+        </Button>
         <Link href="/how-to-play" className="w-full">
-          <Button variant="secondary" className="w-full">
+          <Button variant="ghost" className="w-full">
             <BookOpen className="mr-2 inline h-5 w-5" />
             {id.home.howToPlay}
           </Button>
         </Link>
       </div>
+
+      {/* The walkthrough is offered here too, so a first-time player can see a
+          full round before committing to setting up a table. */}
+      <Tutorial
+        open={watching}
+        firstTime={false}
+        initialMode="watch"
+        onDismiss={() => setWatching(false)}
+      />
 
       <ul className="grid w-full gap-2 text-left">
         {id.home.pillars.map((p, i) => (

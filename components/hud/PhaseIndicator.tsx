@@ -27,11 +27,19 @@ export function isRoundPhase(phase: GamePhase): phase is RoundPhase {
   return (PHASE_ORDER as readonly string[]).includes(phase);
 }
 
+/**
+ * Playtesters asked for a step-by-step gameflow with the current step
+ * highlighted, on top of the description that already existed. The chips show
+ * where the round is; the band underneath says what this phase does and, in
+ * plain imperative English, what the table should do right now.
+ */
 export function PhaseIndicator({ phase }: { phase: GamePhase }) {
   const active = isRoundPhase(phase) ? phase : null;
   const activeIndex = active ? PHASE_ORDER.indexOf(active) : -1;
+  const info = active ? id.phases[active] : null;
 
   return (
+    <div className="space-y-1.5">
     <nav className="flex items-stretch gap-1" aria-label={id.phases[PHASE_ORDER[0]].name}>
       {PHASE_ORDER.map((p, i) => {
         const info = id.phases[p];
@@ -65,5 +73,28 @@ export function PhaseIndicator({ phase }: { phase: GamePhase }) {
         );
       })}
     </nav>
+
+      {info && (
+        <motion.div
+          key={active}
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex gap-2 rounded-xl border-2 border-orange-200 bg-orange-50/70 px-2.5 py-2"
+        >
+          <span className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full bg-orange-500 text-[10px] font-black text-white">
+            {info.num}
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-black uppercase leading-tight tracking-wide text-orange-800">
+              {info.name}
+            </p>
+            <p className="mt-0.5 text-[11px] font-bold leading-snug text-zinc-700">
+              {info.doNow}
+            </p>
+            <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{info.hint}</p>
+          </div>
+        </motion.div>
+      )}
+    </div>
   );
 }

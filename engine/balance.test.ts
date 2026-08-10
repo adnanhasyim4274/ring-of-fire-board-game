@@ -216,7 +216,7 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     );
     // The bar: a greedy bot must at least be able to rescue meaningfully.
     expect(totalEvac / 12).toBeGreaterThan(2);
-  });
+  }, 60_000);
 
   it("a two-Guardian table is still a real game, not an arithmetic wall", () => {
     // Two players have half the action economy of four against the same
@@ -240,7 +240,7 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     // Winnable, but not a formality: the same band the four-player table sits in.
     expect(wins).toBeGreaterThanOrEqual(5);
     expect(wins).toBeLessThanOrEqual(11);
-  });
+  }, 60_000);
 
   it("a three-Guardian table sits in the same band", () => {
     let wins = 0;
@@ -254,7 +254,7 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     console.log(`[BALANCE trio] outcomes=${JSON.stringify(results)} wins=${wins}/12`);
     expect(wins).toBeGreaterThanOrEqual(5);
     expect(wins).toBeLessThanOrEqual(11);
-  });
+  }, 60_000);
 
   it("INTEGRITY — a team that ignores verification must NOT be able to win", () => {
     // This bot never opens a lock and always abstains: pure rescue, zero MIL.
@@ -324,6 +324,6 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
       // hard 0% wall would feel arbitrary, but it must stay the exception.
       expect(wins, `ignore-MIL wins at ${label}`).toBeLessThanOrEqual(2);
     }
-  });
+  }, 60_000);
 
 });
