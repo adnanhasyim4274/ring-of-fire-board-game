@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
+  BookOpen,
   Eye,
   EyeOff,
   Flame,
@@ -48,6 +49,7 @@ import { BarterModal } from "@/components/BarterModal";
 import { ActiveAbilityModal } from "@/components/ActiveAbilityModal";
 import { PeekModal } from "@/components/PeekModal";
 import { GameOverModal } from "@/components/GameOverModal";
+import { RulesModal, useRulesPrimer } from "@/components/RulesModal";
 import { LogPanel } from "@/components/LogPanel";
 import { DebugPanel } from "@/components/DebugPanel";
 import { Button } from "@/components/ui/Button";
@@ -65,6 +67,16 @@ export default function PlayPage() {
   const [handPlayerId, setHandPlayerId] = useState<string | null>(null);
   const [barterCard, setBarterCard] = useState<EvidenceCard | null>(null);
   const [abilityOpen, setAbilityOpen] = useState(false);
+
+  // The rules primer opens by itself the first time, and stays reachable from
+  // the board afterwards. Reopening it deliberately is not a "first time", so
+  // it drops the "do not show again" checkbox.
+  const {
+    open: primerOpen,
+    setOpen: setPrimerOpen,
+    dismiss: dismissPrimer,
+    firstTime: primerFirstTime,
+  } = useRulesPrimer();
 
   useEffect(() => {
     if (mounted && !state) router.replace("/");
@@ -170,6 +182,24 @@ export default function PlayPage() {
   return (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-2.5 p-3 pb-10 lg:max-w-6xl">
       <GameHud state={state} scenario={scenario} />
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setPrimerOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900"
+        >
+          <BookOpen size={13} />
+          {id.primer.open}
+        </button>
+      </div>
+
+      <RulesModal
+        open={primerOpen}
+        firstTime={primerFirstTime}
+        onDismiss={dismissPrimer}
+      />
+
       <PhaseIndicator phase={state.phase} />
 
       {isRoundPhase(state.phase) && (

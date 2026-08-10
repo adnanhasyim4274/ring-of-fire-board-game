@@ -19,14 +19,17 @@ import { evidenceCards } from "@/data/evidenceCards";
 const SID = Object.keys(scenarioById)[0];
 const go = (s: GameState, a: GameAction) => reduce(s, a)!;
 
-function start(seed: number): GameState {
+/** The reference table the balance numbers are tuned against. */
+const FULL_TABLE = ["bald_eagle", "japanese_macaque", "sumatran_tiger", "andean_llama"];
+/** The smallest table the game supports, added when minPlayers dropped to 2. */
+const DUO_TABLE = ["bald_eagle", "andean_llama"];
+const TRIO_TABLE = ["bald_eagle", "andean_llama", "sumatran_tiger"];
+
+function start(seed: number, roster: readonly string[] = FULL_TABLE): GameState {
   return reduce(null, {
     type: "START_GAME",
     scenarioId: SID,
-    players: ["bald_eagle", "japanese_macaque", "sumatran_tiger", "andean_llama"].map((r, i) => ({
-      name: `P${i + 1}`,
-      roleId: r,
-    })),
+    players: roster.map((r, i) => ({ name: `P${i + 1}`, roleId: r })),
     seed,
   } as GameAction)!;
 }
@@ -138,8 +141,8 @@ function rescueStep(s: GameState): GameAction | null {
   return null;
 }
 
-function playGame(seed: number) {
-  let s = start(seed);
+function playGame(seed: number, roster: readonly string[] = FULL_TABLE) {
+  let s = start(seed, roster);
   let guard = 0;
   while (s.phase !== "game_over" && guard < 3000) {
     guard++;
@@ -215,11 +218,49 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     expect(totalEvac / 12).toBeGreaterThan(2);
   });
 
+  it("a two-Guardian table is still a real game, not an arithmetic wall", () => {
+    // Two players have half the action economy of four against the same
+    // 12-card clock, so the evacuation target scales down to match. This guard
+    // exists because raising the target back to a flat number would silently
+    // turn the smallest supported table into an unwinnable one.
+    const results: Record<string, number> = {};
+    let totalEvac = 0;
+    let wins = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = playGame(seed, DUO_TABLE);
+      const key = s.gameOverReason ?? "none";
+      results[key] = (results[key] ?? 0) + 1;
+      totalEvac += s.evacuees.length;
+      if (s.gameOverReason === "win") wins++;
+    }
+    console.log(
+      `[BALANCE duo] outcomes=${JSON.stringify(results)} ` +
+        `avgEvac=${(totalEvac / 12).toFixed(1)} wins=${wins}/12`
+    );
+    // Winnable, but not a formality: the same band the four-player table sits in.
+    expect(wins).toBeGreaterThanOrEqual(5);
+    expect(wins).toBeLessThanOrEqual(11);
+  });
+
+  it("a three-Guardian table sits in the same band", () => {
+    let wins = 0;
+    const results: Record<string, number> = {};
+    for (let seed = 1; seed <= 12; seed++) {
+      const s = playGame(seed, TRIO_TABLE);
+      const key = s.gameOverReason ?? "none";
+      results[key] = (results[key] ?? 0) + 1;
+      if (s.gameOverReason === "win") wins++;
+    }
+    console.log(`[BALANCE trio] outcomes=${JSON.stringify(results)} wins=${wins}/12`);
+    expect(wins).toBeGreaterThanOrEqual(5);
+    expect(wins).toBeLessThanOrEqual(11);
+  });
+
   it("INTEGRITY — a team that ignores verification must NOT be able to win", () => {
     // This bot never opens a lock and always abstains: pure rescue, zero MIL.
     // If it can still win, the educational core of the game is skippable.
-    function playIgnoringMil(seed: number): GameState {
-      let s = start(seed);
+    function playIgnoringMil(seed: number, roster: readonly string[] = FULL_TABLE): GameState {
+      let s = start(seed, roster);
       let guard = 0;
       while (s.phase !== "game_over" && guard < 3000) {
         guard++;
@@ -259,18 +300,30 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
       return s;
     }
 
-    const outcomes: Record<string, number> = {};
-    let wins = 0;
-    for (let seed = 1; seed <= 12; seed++) {
-      const s = playIgnoringMil(seed);
-      const key = s.gameOverReason ?? "none";
-      outcomes[key] = (outcomes[key] ?? 0) + 1;
-      if (s.gameOverReason === "win") wins++;
+    // The guard has to hold at every table size, not just the reference one.
+    // A smaller table plays against a lower evacuation target, so if the target
+    // were ever scaled down too far, a pure-rescue team could start winning at
+    // two players while the four-player test still looked healthy.
+    for (const [label, roster] of [
+      ["4p", FULL_TABLE],
+      ["3p", TRIO_TABLE],
+      ["2p", DUO_TABLE],
+    ] as const) {
+      const outcomes: Record<string, number> = {};
+      let wins = 0;
+      for (let seed = 1; seed <= 12; seed++) {
+        const s = playIgnoringMil(seed, roster);
+        const key = s.gameOverReason ?? "none";
+        outcomes[key] = (outcomes[key] ?? 0) + 1;
+        if (s.gameOverReason === "win") wins++;
+      }
+      console.log(
+        `[INTEGRITY ignore-MIL ${label}] outcomes=${JSON.stringify(outcomes)} wins=${wins}/12`
+      );
+      // Skipping verification must be punished. A rare lucky win is healthy, a
+      // hard 0% wall would feel arbitrary, but it must stay the exception.
+      expect(wins, `ignore-MIL wins at ${label}`).toBeLessThanOrEqual(2);
     }
-    console.log(`[INTEGRITY ignore-MIL] outcomes=${JSON.stringify(outcomes)} wins=${wins}/12`);
-    // Skipping verification must be punished. A rare lucky win is healthy — a
-    // hard 0% wall would feel arbitrary — but it must be the exception.
-    expect(wins).toBeLessThanOrEqual(2);
   });
 
 });

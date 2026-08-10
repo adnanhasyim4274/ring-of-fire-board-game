@@ -39,7 +39,7 @@ export const en = {
     playNow: "Start the Mission",
     continueGame: "Continue Game",
     howToPlay: "How to Play",
-    passAndPlay: "One device · pass and play · 3–6 Guardians",
+    passAndPlay: "One device · pass and play · 2–6 Guardians",
     demoNote: "This is a digital demo. The physical board game is the real product.",
     pillars: [
       {
@@ -455,9 +455,86 @@ export const en = {
     timeUp: "Time is up — decide now",
   },
 
+  /**
+   * Shown once before the first round so a new player can picture a turn
+   * before being asked to take one. Reopenable from the board at any time.
+   */
+  primer: {
+    open: "Rules",
+    title: "How a round works",
+    subtitle:
+      "Sixty seconds of reading, then you can play. You are Wildlife Guardians on the Pacific Ring of Fire, and you win or lose as one table.",
+    goalLabel: "Your goal",
+    goalBody:
+      "Move enough villagers to a Ready Post before the Disaster deck runs out. The target scales with the size of your table, and the counter at the top of the board always shows the one you need.",
+    roundLabel: "Every round runs these five phases, in this order",
+    steps: [
+      {
+        n: "1",
+        title: "The Ring of Fire's Wrath",
+        body: "A Disaster card flips and rewrites this round's rules. Ocean disasters shut the Sea Lane through the middle of the board.",
+      },
+      {
+        n: "2",
+        title: "Breaking News",
+        body: "A News card arrives. A Crisis Token lands on the region it names, and everybody standing there panics.",
+      },
+      {
+        n: "3",
+        title: "Guardian Turns",
+        body: "Four action points each. Move, calm a panicked villager, escort someone to safety, investigate, or play Evidence onto the news card's two 5W1H locks.",
+      },
+      {
+        n: "4",
+        title: "The Verdict",
+        body: "The table commits to HOAX, FACT or ABSTAIN. Only then do you turn the card over and read the truth on the back.",
+      },
+      {
+        n: "5",
+        title: "Impact and Escalation",
+        body: "Damage is applied, reputation is spent, and the win and loss conditions are checked before the next round begins.",
+      },
+    ],
+    outcomeLabel: "What the verdict earns you",
+    outcomes: [
+      {
+        tag: "VERIFIED",
+        cond: "Right verdict, both locks opened",
+        result: "+1 Reputation, and the Crisis Token is cleared",
+        tone: "good" as const,
+      },
+      {
+        tag: "LUCKY GUESS",
+        cond: "Right verdict, but the locks were incomplete",
+        result: "Nothing at all. Being right is not the same as being sure",
+        tone: "warn" as const,
+      },
+      {
+        tag: "RUMOUR SPREADS",
+        cond: "Wrong verdict, or you abstained",
+        result: "+1 Panic, and you draw a Chaos card",
+        tone: "bad" as const,
+      },
+    ],
+    keyLabel: "The two rules that decide most games",
+    keys: [
+      "An Evidence card can prove the news OR be spent to act faster. Never both. That single choice is the whole game.",
+      "While an unverified Crisis Token sits on a tile, nobody can be escorted off it. You cannot rescue your way past a rumour, you have to settle it first.",
+    ],
+    loseLabel: "You lose if",
+    lose: [
+      "The Panic Meter reaches 6",
+      "Too few villagers remain for the target to be reachable",
+      "The Disaster deck runs out before you hit the target",
+    ],
+    dontShow: "Do not show this again",
+    start: "Got it, begin Phase 1",
+    close: "Close",
+  },
+
   howTo: {
     title: "How to Play",
-    subtitle: "Ring of Fire — cooperative, 3–6 players, 60–90 minutes, ages 15+.",
+    subtitle: "Ring of Fire: cooperative, 2–6 players, 60–90 minutes, ages 15+.",
     backHome: "Back to Home",
     startNow: "Play Now",
     sections: {
@@ -465,7 +542,7 @@ export const en = {
         title: "The Goal",
         body: "Get enough Villager tokens to a Ready Post before the Disaster deck runs out. You win together or lose together — there is no single winner.",
         bullets: [
-          "Win: 15 of the 18 villagers reach a Ready Post before the Disaster deck is empty.",
+          "Win: the evacuation target reaches a Ready Post before the Disaster deck is empty. The target scales with the table: 9 villagers with 2 Guardians, 12 with 3, 15 with 4 or more.",
           "Lose — Literacy Failure: the Panic Meter reaches 6.",
           "Lose — Casualties: too few villagers remain for the target to be reachable.",
           "Lose — Out of Time: the last Disaster Card is drawn with the target unmet.",

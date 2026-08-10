@@ -23,6 +23,7 @@ import {
   isSeaLaneOpen,
   maxEscortGroup,
   moveCost,
+  targetEvacuation,
 } from "@/engine/rules";
 
 /** Apakah perpindahan a -> b memakai Rute Laut, bukan langkah rim biasa. */
@@ -76,4 +77,5 @@ export {
   isPassable,
   isSeaLaneOpen,
   moveCost,
+  targetEvacuation,
 };

@@ -7,11 +7,14 @@ export function Modal({
   onClose,
   children,
   dismissable = true,
+  size = "md",
 }: {
   open: boolean;
   onClose?: () => void;
   children: ReactNode;
   dismissable?: boolean;
+  /** "lg" is for briefings that need columns, such as the rules primer. */
+  size?: "md" | "lg";
 }) {
   return (
     <AnimatePresence>
@@ -24,7 +27,10 @@ export function Modal({
           onClick={dismissable ? onClose : undefined}
         >
           <motion.div
-            className="max-h-[85vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+            className={
+              "max-h-[88vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl " +
+              (size === "lg" ? "max-w-3xl" : "max-w-md")
+            }
             initial={{ scale: 0.9, y: 20 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.9, y: 20 }}

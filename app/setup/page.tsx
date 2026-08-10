@@ -23,11 +23,9 @@ export default function SetupPage() {
   const router = useRouter();
 
   const [scenarioId, setScenarioId] = useState<string>(gameConfig.defaultScenarioId);
-  const [slots, setSlots] = useState<Slot[]>([
-    { name: "", roleId: "" },
-    { name: "", roleId: "" },
-    { name: "", roleId: "" },
-  ]);
+  const [slots, setSlots] = useState<Slot[]>(
+    Array.from({ length: gameConfig.minPlayers }, () => ({ name: "", roleId: "" }))
+  );
 
   const setCount = (n: number) => {
     setSlots((prev) => {

@@ -8,14 +8,16 @@ import { PanicMeter } from "@/components/hud/PanicMeter";
 import { ReputationTrack } from "@/components/hud/ReputationTrack";
 import { DisasterDeckCounter } from "@/components/hud/DisasterDeckCounter";
 import { APCounter } from "@/components/hud/APCounter";
-import { isSeaLaneOpen } from "@/lib/engineBridge";
+import { isSeaLaneOpen, targetEvacuation } from "@/lib/engineBridge";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 
 /** Papan status tim: satu blok, terbaca sekali lihat di lebar 375px. */
 export function GameHud({ state, scenario }: { state: GameState; scenario: Scenario }) {
   const current = state.players[state.currentPlayerIndex];
-  const target = scenario.targetEvacuation ?? gameConfig.targetEvacuation;
+  // Scales with the size of the table, so read it from the engine rather
+  // than from the scenario, which only carries the four-player number.
+  const target = targetEvacuation(state);
   const deckTotal = scenario.disasterDeckSize ?? gameConfig.disasterDeckSize;
   const canAfford = rewardCards.some(
     (r) => !state.ownedRewards.includes(r.id) && state.reputation >= r.cost

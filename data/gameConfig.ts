@@ -7,14 +7,25 @@
 // ============================================================================
 
 export const gameConfig = {
-  minPlayers: 3,
+  minPlayers: 2,
   maxPlayers: 6,
 
   // — Single difficulty (spec §3) —
   /** 18 villagers, 3 per sector, never on a Ready Post or Sea Lane tile. */
   totalVillagers: 18,
-  /** Reach the Ready Posts with 12 of them to win. */
+  /** Reach the Ready Posts with this many of them to win (4+ Guardians). */
   targetEvacuation: 15,
+  /**
+   * The evacuation target scales with the number of Guardians, because the
+   * action economy does: 4 AP per player per round means a 2-player table has
+   * half the actions of a 4-player one against the same 12-card clock. Holding
+   * the target at 15 would not make the game harder, it would make it
+   * arithmetically unreachable. These numbers are calibrated by simulation in
+   * engine/balance.test.ts against the same target as every other count: a
+   * competent team wins most games, a team that skips verification wins almost
+   * none.
+   */
+  targetEvacuationByPlayers: { 2: 12, 3: 13, 4: 15, 5: 15, 6: 15 } as Record<number, number>,
   /** Panic Meter hits 6 and the table loses. */
   panicMeterMax: 6,
   /** The Disaster deck is the game clock: 14 cards = 14 rounds. */

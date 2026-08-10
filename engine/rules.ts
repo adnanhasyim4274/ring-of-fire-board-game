@@ -59,9 +59,16 @@ export const PANIC_METER_MAX = cfg("panicMeterMax", 6);
 export const DISASTER_DECK_SIZE = cfg("disasterDeckSize", 12);
 export const SEA_LANE_MAX_VILLAGERS = cfg("seaLaneMaxVillagers", 1);
 
-/** How many villagers must reach a Ready Post to win. */
+/**
+ * How many villagers must reach a Ready Post to win.
+ *
+ * Scales with the size of the table. See the note on
+ * `gameConfig.targetEvacuationByPlayers` for why this is not a fixed number.
+ */
 export function targetEvacuation(state: GameState): number {
-  return getScenario(state)?.targetEvacuation ?? TARGET_EVACUATION;
+  const base = getScenario(state)?.targetEvacuation ?? TARGET_EVACUATION;
+  const n = state.players?.length ?? 0;
+  return gameConfig.targetEvacuationByPlayers[n] ?? base;
 }
 
 // ——— PRNG ————————————————————————————————————————————————————————————
