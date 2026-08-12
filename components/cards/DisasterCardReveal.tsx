@@ -5,6 +5,7 @@ import type { DisasterCard } from "@/engine/types";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { DISASTER_CATEGORY_CLASS } from "@/lib/theme";
+import { ART } from "@/data/artManifest";
 
 export function DisasterCardReveal({
   card,
@@ -18,6 +19,12 @@ export function DisasterCardReveal({
       ? id.disaster.allSectors
       : card.affectedSectorIds.map((s) => id.board.sectorShort[s]).join(" · ");
 
+  // The printed card, when the illustrator has drawn this one. It sits above
+  // the text rather than replacing it: the artwork is what players will hold
+  // at the table, but the text stays legible at 375px and stays readable to a
+  // screen reader.
+  const art = compact ? undefined : ART.disasterCard[card.id];
+
   return (
     <motion.article
       initial={compact ? false : { rotateX: -70, opacity: 0, y: -14 }}
@@ -29,6 +36,16 @@ export function DisasterCardReveal({
         DISASTER_CATEGORY_CLASS[card.category]
       )}
     >
+      {art && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={art}
+          alt=""
+          className="block h-auto w-full"
+          draggable={false}
+        />
+      )}
+
       <header className="flex items-center gap-2 bg-black/30 px-3 py-1.5">
         <Flame className="h-4 w-4 shrink-0" />
         <span className="text-[11px] font-black uppercase tracking-widest">

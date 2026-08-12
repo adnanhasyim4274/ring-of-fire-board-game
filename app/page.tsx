@@ -6,6 +6,7 @@ import { BookOpen, Play, PlayCircle } from "lucide-react";
 import { useGameStore } from "@/store/gameStore";
 import { Button } from "@/components/ui/Button";
 import { Tutorial } from "@/components/Tutorial";
+import { ART } from "@/data/artManifest";
 import { useHydrated } from "@/lib/useHydrated";
 import { en as id } from "@/lib/i18n/en";
 import { roleEmoji } from "@/lib/roleEmoji";
@@ -115,6 +116,23 @@ export default function HomePage() {
       </ul>
 
       <p className="text-xs text-zinc-400">{id.home.passAndPlay}</p>
+      {/* The box art, because the sentence underneath claims the physical
+          game is the real product and a claim like that should be shown. */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="w-full overflow-hidden rounded-2xl border border-black/10 shadow-sm"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={ART.boxFront}
+          alt="The printed Ring of Fire board game box"
+          className="block h-auto w-full"
+          draggable={false}
+        />
+      </motion.div>
+
       <p className="text-[11px] text-zinc-400">{id.home.demoNote}</p>
     </main>
   );

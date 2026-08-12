@@ -1,8 +1,10 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
-import { Check, CircleSlash, FlipHorizontal, Gavel, Lock, LockOpen } from "lucide-react";
+import { Check, FlipHorizontal, Gavel, Lock, LockOpen } from "lucide-react";
 import type { GameAction, GameState, NewsCard, Verdict } from "@/engine/types";
+import { ART } from "@/data/artManifest";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { NewsCardDisplay } from "@/components/cards/NewsCardDisplay";
@@ -100,6 +102,7 @@ export function VerdictPanel({
               label={id.verdict.hoax}
               hint={id.verdict.hoaxHint}
               className="border-red-600 bg-red-50 text-red-800 hover:bg-red-100"
+              icon={<VerdictToken verdict="hoax" px={24} />}
               onPick={setPending}
             />
             <VerdictButton
@@ -107,6 +110,7 @@ export function VerdictPanel({
               label={id.verdict.fakta}
               hint={id.verdict.faktaHint}
               className="border-emerald-600 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              icon={<VerdictToken verdict="fact" px={24} />}
               onPick={setPending}
             />
           </div>
@@ -115,7 +119,7 @@ export function VerdictPanel({
             label={id.verdict.abstain}
             hint={id.verdict.abstainHint}
             className="border-zinc-300 bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
-            icon={<CircleSlash className="h-4 w-4" />}
+            icon={<VerdictToken verdict="abstain" px={24} />}
             onPick={setPending}
           />
         </div>
@@ -131,6 +135,9 @@ export function VerdictPanel({
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-wide">
             <Gavel className="h-4 w-4" />
             {id.verdict.committed}: {verdictLabel(state.verdict)}
+            {state.verdict && (
+              <VerdictToken verdict={state.verdict} px={22} className="ml-auto" />
+            )}
           </p>
           <p className="text-[11px] leading-snug text-white/70">
             {id.verdict.committedNote}
@@ -164,6 +171,7 @@ export function VerdictPanel({
           <span className="block text-[10px] font-black uppercase tracking-wide text-zinc-500">
             {id.verdict.confirmChoice}
           </span>
+          {pending && <VerdictToken verdict={pending} px={44} className="mx-auto my-1 block" />}
           <span className="text-2xl font-black tracking-tight">
             {verdictLabel(pending)}
           </span>
@@ -175,6 +183,38 @@ export function VerdictPanel({
         )}
       </ConfirmDialog>
     </div>
+  );
+}
+
+/** The printed Verdict Token for each vonis. */
+const VERDICT_TOKEN: Record<Verdict, string> = {
+  fact: ART.token.verdict_fact,
+  hoax: ART.token.verdict_hoax,
+  abstain: ART.token.verdict_abstain,
+};
+
+/**
+ * Decorative: every place this is used already prints the verdict in words
+ * right beside it, so the token carries no information of its own. Fixed
+ * width/height means the button never reflows while the file loads.
+ */
+function VerdictToken({
+  verdict,
+  px,
+  className,
+}: {
+  verdict: Verdict;
+  px: number;
+  className?: string;
+}) {
+  return (
+    <Image
+      src={VERDICT_TOKEN[verdict]}
+      alt=""
+      width={px}
+      height={px}
+      className={cn("shrink-0", className)}
+    />
   );
 }
 

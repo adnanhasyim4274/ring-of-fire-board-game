@@ -1,6 +1,7 @@
 "use client";
+import Image from "next/image";
 import { motion } from "framer-motion";
-import { Award } from "lucide-react";
+import { ART } from "@/data/artManifest";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 
@@ -24,7 +25,16 @@ export function ReputationTrack({
       aria-label={`${id.hud.reputation}: ${value} ${id.common.of} ${max}`}
     >
       <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide">
-        <Award className={cn("h-4 w-4", affordable ? "text-rep" : "text-zinc-400")} />
+        {/* The printed Reputation Point token. Decorative — the label and the
+            value sit beside it. Desaturated while nothing is affordable yet,
+            which is the same cue the greyed-out icon used to carry. */}
+        <Image
+          src={ART.token.reputation_point}
+          alt=""
+          width={16}
+          height={16}
+          className={cn("h-4 w-4 shrink-0", affordable ? "" : "opacity-50 saturate-0")}
+        />
         <span className="text-zinc-600">{id.hud.reputation}</span>
         <span className="ml-auto text-sm tabular-nums text-zinc-800">
           {value}/{max}

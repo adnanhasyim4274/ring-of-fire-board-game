@@ -18,6 +18,7 @@ import {
   tileCentre,
   tileHexPoints,
 } from "@/lib/ring";
+import { TILE_ART_BOX, TILE_ART_WASH, tileArtworkSrc } from "@/lib/tileArt";
 import { emojiForRole } from "@/lib/roleEmoji";
 import { en as id } from "@/lib/i18n/en";
 
@@ -104,6 +105,12 @@ function RingTileImpl({
         ? SECTOR_GLYPH[tile.sectorId]
         : "post";
 
+  // Printed artwork for this hex. The mapping lives in lib/tileArt.ts.
+  const artSrc = tileArtworkSrc(tile);
+  const clipId = `rof-hex-clip-${tile.index}`;
+  // A destroyed tile is darkened, a closed Sea Lane is faded out.
+  const bodyOpacity = hancur ? 0.9 : onLane && !seaLaneOpen ? 0.35 : 1;
+
   const calm = tile.occupants.filter((v) => v.status === "calm");
   const panicked = tile.occupants.filter((v) => v.status === "panicked");
   const shown = [...panicked, ...calm].slice(0, 3);
@@ -142,15 +149,40 @@ function RingTileImpl({
         }
       }}
     >
-      {/* Tile body. A closed Sea Lane is dimmed AND dashed, so the state reads
-          without relying on colour alone. */}
+      {/* Tile body, three layers:
+            1. the flat sector colour, which stays visible if the artwork ever
+               fails to load, so a missing file can never blank out the board;
+            2. the printed painting, clipped to the hexagon;
+            3. the same colour washed back on top, keeping the sector cue and
+               the contrast the white Villager/Crisis/number overlays need.
+          A closed Sea Lane is dimmed AND dashed, so the state reads without
+          relying on colour alone. */}
+      <defs>
+        <clipPath id={clipId}>
+          <polygon points={points} />
+        </clipPath>
+      </defs>
+      <polygon points={points} fill={hancur ? "#1b1b1f" : fill} />
+      {/* Decorative: the <g> above already names the region, sector and state. */}
+      <image
+        href={artSrc}
+        x={centre.x - TILE_ART_BOX / 2}
+        y={centre.y - TILE_ART_BOX / 2}
+        width={TILE_ART_BOX}
+        height={TILE_ART_BOX}
+        preserveAspectRatio="xMidYMid meet"
+        clipPath={`url(#${clipId})`}
+        opacity={bodyOpacity}
+        aria-hidden
+      />
       <polygon
         points={points}
         fill={hancur ? "#1b1b1f" : fill}
+        fillOpacity={hancur ? 0.55 : TILE_ART_WASH}
         stroke={hancur ? "#000000" : edge}
         strokeWidth={3}
         strokeDasharray={onLane && !seaLaneOpen ? "10 8" : undefined}
-        opacity={hancur ? 0.9 : onLane && !seaLaneOpen ? 0.35 : 1}
+        opacity={bodyOpacity}
       />
 
       {/* Watermark ikon sektor — isyarat non-warna */}

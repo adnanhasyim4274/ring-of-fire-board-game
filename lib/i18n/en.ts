@@ -608,8 +608,11 @@ export const en = {
     pass: "Pass the device to",
     yourTurn: "Your turn",
     ap: "Action points",
-    tap: "Tap anywhere when you are holding it",
+    tap: "Tap the card when you are holding it",
     hiddenHand: "Your hand is yours alone. Do not show it to anyone.",
+    yourRole: "Your Guardian",
+    flipHint: "Tap to turn your role card over",
+    start: "Start my turn",
   },
 
   howTo: {
