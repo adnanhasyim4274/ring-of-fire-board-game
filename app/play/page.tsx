@@ -140,10 +140,15 @@ export default function PlayPage() {
 
     // Mode kawal: ketukan berikutnya adalah ubin tujuan.
     if (escortIds.length > 0 && move) {
+      // A Sea Lane crossing carries one villager whatever the Guardian's
+      // escort bonus is, but the selection cap is computed before the
+      // destination is known. Clamp here: the reducer would otherwise refuse
+      // the whole action, and the selection would vanish with nobody moved.
+      const ids = escortIds.slice(0, escortGroupLimit(current, move.viaSeaLane));
       dispatch({
         type: "ESCORT_VILLAGER",
         playerId: current.id,
-        villagerIds: escortIds,
+        villagerIds: ids,
         targetTileIndex: index,
         viaSeaLane: move.viaSeaLane,
       });

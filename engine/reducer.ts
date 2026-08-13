@@ -12,6 +12,7 @@ import type {
   Player,
   Scenario,
   SectorId,
+  SubMissionKey,
   TileDamage,
   TileState,
   VillagerToken,
@@ -233,7 +234,12 @@ function driftVillagers(s: GameState, count: number) {
 
 // ——— Sub-missions ——————————————————————————————————————————————————————
 
-function bumpSubMission(s: GameState, player: Player, key: string, amount = 1) {
+function bumpSubMission(
+  s: GameState,
+  player: Player,
+  key: SubMissionKey,
+  amount = 1
+) {
   const role = roleOf(player);
   if (!role || role.subMissionKey !== key || player.subMissionDone) return;
   player.subMissionProgress += amount;
@@ -793,6 +799,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       for (const v of group) {
         moveVillagerTo(s, v, from, to);
         if (target.isReadyPost && fromCrisis) bumpSubMission(s, player, "rescue_crisis", 1);
+        if (target.isReadyPost && viaSea) bumpSubMission(s, player, "safe_passage", 1);
       }
       player.position = to;
       if (target.isReadyPost) {
@@ -1100,7 +1107,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       // 🦅 Pemetaan Kritis: end a turn on 3 different damaged tiles.
       if (tile && tile.damage > 0 && !player.damagedTilesVisited.includes(tile.index)) {
         player.damagedTilesVisited.push(tile.index);
-        bumpSubMission(s, player, "map_damaged", 1);
+        bumpSubMission(s, player, "critical_mapping", 1);
       }
       // Pos Siaga bonus stage.
       if (tile?.isReadyPost) {

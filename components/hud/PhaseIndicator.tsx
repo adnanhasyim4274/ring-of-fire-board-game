@@ -40,7 +40,7 @@ export function PhaseIndicator({ phase }: { phase: GamePhase }) {
 
   return (
     <div className="space-y-1.5">
-    <nav className="flex items-stretch gap-1" aria-label={id.phases[PHASE_ORDER[0]].name}>
+    <nav className="flex items-stretch gap-1" aria-label={id.hud.phaseNav}>
       {PHASE_ORDER.map((p, i) => {
         const info = id.phases[p];
         const isActive = p === active;

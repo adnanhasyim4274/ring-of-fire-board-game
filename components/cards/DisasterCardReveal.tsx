@@ -19,10 +19,11 @@ export function DisasterCardReveal({
       ? id.disaster.allSectors
       : card.affectedSectorIds.map((s) => id.board.sectorShort[s]).join(" · ");
 
-  // The printed card, when the illustrator has drawn this one. It sits above
-  // the text rather than replacing it: the artwork is what players will hold
-  // at the table, but the text stays legible at 375px and stays readable to a
-  // screen reader.
+  // The printed card, when the illustrator has drawn this one. It already
+  // carries the title, the round effect and the final consequence, so rendering
+  // the text panel underneath it as well just says everything twice. The text
+  // layout stays as the fallback for cards without artwork and for the compact
+  // in-round summary, and the same words are kept for screen readers.
   const art = compact ? undefined : ART.disasterCard[card.id];
 
   return (
@@ -36,16 +37,23 @@ export function DisasterCardReveal({
         DISASTER_CATEGORY_CLASS[card.category]
       )}
     >
-      {art && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={art}
-          alt=""
-          className="block h-auto w-full"
-          draggable={false}
-        />
-      )}
-
+      {art ? (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={art}
+            alt=""
+            className="block h-auto w-full"
+            draggable={false}
+          />
+          <span className="sr-only">
+            {id.disaster.category[card.category]}. {card.title}. {sectors}.{" "}
+            {card.description} {id.disaster.roundEffect}: {card.roundEffect}{" "}
+            {id.disaster.endEffect}: {card.endEffect}
+          </span>
+        </>
+      ) : (
+        <>
       <header className="flex items-center gap-2 bg-black/30 px-3 py-1.5">
         <Flame className="h-4 w-4 shrink-0" />
         <span className="text-[11px] font-black uppercase tracking-widest">
@@ -89,6 +97,8 @@ export function DisasterCardReveal({
           </div>
         )}
       </div>
+        </>
+      )}
     </motion.article>
   );
 }

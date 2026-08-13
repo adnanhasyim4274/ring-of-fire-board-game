@@ -12,7 +12,6 @@ import {
   CRISIS_COLOR,
 } from "@/lib/theme";
 import {
-  HEX_RADIUS,
   seaLaneHexPoints,
   seaLaneTileCentre,
   tileCentre,
@@ -38,6 +37,15 @@ const GLYPH_PATH: Record<string, string> = {
   island: "M -17 10 q 9 -6 17 0 q 8 6 17 0 M -8 2 L 0 -13 L 8 2 Z",
   // Tenda posko — Pos Siaga
   post: "M -15 12 L 0 -13 L 15 12 Z M 0 -13 L 0 12 M 0 -13 L 0 -19 L 10 -16 L 0 -13",
+  // Konifer — Busur Cascadia. SECTOR_GLYPH memakai kunci ini, dan tanpa
+  // entri di sini `d` menjadi undefined sehingga ubinnya kehilangan isyarat
+  // non-warna yang justru wajib untuk pemain buta warna.
+  pine: "M 0 -18 L -10 -2 L -5 -2 L -13 9 L 13 9 L 5 -2 L 10 -2 Z M 0 9 L 0 14",
+  // Semburan geiser — Busur Pasifik Selatan
+  geyser:
+    "M -13 13 L 13 13 M 0 13 L 0 -2 M -4 -2 q -6 -9 -1 -16 M 4 -2 q 6 -9 1 -16",
+  // Penyeberangan laut — Sea Lane, ombak dengan panah melintas
+  lane: "M -16 9 q 8 -9 16 0 q 8 9 16 0 M 0 -16 L 0 3 M -7 -9 L 0 -16 L 7 -9",
 };
 
 export interface RingTileProps {
@@ -395,7 +403,7 @@ function RingTileImpl({
       <polygon points={points} fill="transparent" />
       {/* Cincin fokus keyboard */}
       <polygon
-        points={tileHexPoints(tile.index, ringSize, HEX_RADIUS + 6)}
+        points={points}
         fill="none"
         stroke="#facc15"
         strokeWidth={5}

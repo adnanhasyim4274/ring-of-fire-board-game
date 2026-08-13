@@ -43,12 +43,16 @@ export function TurnSplash({
     <AnimatePresence>
       {open && player && (
         <motion.div
-          className="fixed inset-0 z-40 flex flex-col items-center justify-center gap-4 bg-gradient-to-b from-stone-900 via-stone-900 to-orange-950 p-5 text-center"
+          className="fixed inset-0 z-40 overflow-y-auto bg-gradient-to-b from-stone-900 via-stone-900 to-orange-950"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
         >
+          {/* Scrolls, and the exit button is always rendered. Without both, a
+              short viewport (landscape especially) put "Start my turn" off
+              screen with no way to reach it and no way out of the splash. */}
+          <div className="flex min-h-full flex-col items-center justify-center gap-4 p-5 text-center">
           <motion.p
             className="text-[11px] font-black uppercase tracking-[0.2em] text-orange-400"
             initial={{ opacity: 0, y: 8 }}
@@ -129,11 +133,7 @@ export function TurnSplash({
             {id.turnSplash.hiddenHand}
           </p>
 
-          {flipped ? (
-            <Button onClick={onDismiss} className="min-w-[200px]">
-              {id.turnSplash.start}
-            </Button>
-          ) : (
+          {!flipped && (
             <motion.p
               className="text-xs font-bold text-stone-500"
               animate={{ opacity: [0.35, 1, 0.35] }}
@@ -142,6 +142,11 @@ export function TurnSplash({
               {id.turnSplash.flipHint}
             </motion.p>
           )}
+
+          <Button onClick={onDismiss} className="min-w-[200px]">
+            {id.turnSplash.start}
+          </Button>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

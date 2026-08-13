@@ -17,6 +17,7 @@ import type { EvidenceCategory, NewsCard } from "@/engine/types";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON, NEWS_CATEGORY_CLASS } from "@/lib/theme";
+import { NEWS_ART } from "@/lib/newsArt";
 
 /**
  * Kartu Berita dengan animasi balik 3D sungguhan.
@@ -74,6 +75,15 @@ function NewsFront({
   locksOpened: EvidenceCategory[];
   sectorName?: string;
 }) {
+  // The printed front, when the illustrator has drawn this one. It already
+  // carries the headline, the post body and the attached-content note, so the
+  // social-post panel is swapped out for it rather than stacked under it and
+  // the same words are kept for screen readers. Everything below the post is
+  // live game state (which locks are open, the real target sector), so it is
+  // still rendered from data — the print shows the locks closed and, on the one
+  // artwork that maps, a pre-v3 sector label. See lib/newsArt.ts.
+  const art = NEWS_ART[card.id];
+
   return (
     <article className="overflow-hidden rounded-2xl border-2 border-zinc-300 bg-white shadow-lg">
       <header className="flex items-center gap-2 bg-ash px-3 py-1.5 text-white">
@@ -91,43 +101,53 @@ function NewsFront({
         </span>
       </header>
 
-      {/* Postingan medsos */}
-      <div className="border-b border-zinc-200 p-3">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-zinc-300 to-zinc-400 text-sm">
-            👤
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-xs font-black text-zinc-800">
-              {id.news.postedBy}
-            </span>
-            <span className="block text-[10px] text-zinc-400">••••••</span>
+      {art ? (
+        <div className="border-b border-zinc-200 bg-zinc-100">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={art} alt="" className="block h-auto w-full" draggable={false} />
+          <span className="sr-only">
+            {card.title}. {card.body} {id.news.attached}: {card.attachedContent}
           </span>
         </div>
-
-        <h2 className="text-base font-black leading-tight text-zinc-900">{card.title}</h2>
-        <p className="mt-1 whitespace-pre-line text-sm leading-snug text-zinc-700">
-          {card.body}
-        </p>
-
-        <div className="mt-2 flex items-start gap-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-2">
-          <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
-          <span className="min-w-0">
-            <span className="block text-[10px] font-black uppercase tracking-wide text-zinc-400">
-              {id.news.attached}
+      ) : (
+        /* Postingan medsos */
+        <div className="border-b border-zinc-200 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-zinc-300 to-zinc-400 text-sm">
+              👤
             </span>
-            <span className="block text-xs italic leading-snug text-zinc-600">
-              {card.attachedContent}
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-black text-zinc-800">
+                {id.news.postedBy}
+              </span>
+              <span className="block text-[10px] text-zinc-400">••••••</span>
             </span>
-          </span>
-        </div>
+          </div>
 
-        <div className="mt-2 flex items-center gap-4 text-zinc-400" aria-hidden>
-          <Heart className="h-3.5 w-3.5" />
-          <MessageCircle className="h-3.5 w-3.5" />
-          <Forward className="h-3.5 w-3.5" />
+          <h2 className="text-base font-black leading-tight text-zinc-900">{card.title}</h2>
+          <p className="mt-1 whitespace-pre-line text-sm leading-snug text-zinc-700">
+            {card.body}
+          </p>
+
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-dashed border-zinc-300 bg-zinc-50 p-2">
+            <ImageIcon className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+            <span className="min-w-0">
+              <span className="block text-[10px] font-black uppercase tracking-wide text-zinc-400">
+                {id.news.attached}
+              </span>
+              <span className="block text-xs italic leading-snug text-zinc-600">
+                {card.attachedContent}
+              </span>
+            </span>
+          </div>
+
+          <div className="mt-2 flex items-center gap-4 text-zinc-400" aria-hidden>
+            <Heart className="h-3.5 w-3.5" />
+            <MessageCircle className="h-3.5 w-3.5" />
+            <Forward className="h-3.5 w-3.5" />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="space-y-2.5 p-3">
         <p className="flex items-center gap-1.5 text-xs font-bold text-lava">

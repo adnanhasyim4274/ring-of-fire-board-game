@@ -113,6 +113,7 @@ export const en = {
   },
 
   hud: {
+    phaseNav: "Round phases",
     panicMeter: "Panic Meter",
     panicHint: "Fill it and people stop believing you at all.",
     reputation: "Reputation",
@@ -625,7 +626,7 @@ export const en = {
         title: "The Goal",
         body: "Get enough Villager tokens to a Ready Post before the Disaster deck runs out. You win together or lose together — there is no single winner.",
         bullets: [
-          "Win: the evacuation target reaches a Ready Post before the Disaster deck is empty. The target scales with the table: 9 villagers with 2 Guardians, 12 with 3, 15 with 4 or more.",
+          "Win: the evacuation target reaches a Ready Post before the Disaster deck is empty. The target scales with the table: 12 villagers with 2 Guardians, 13 with 3, 15 with 4 or more.",
           "Lose — Literacy Failure: the Panic Meter reaches 6.",
           "Lose — Casualties: too few villagers remain for the target to be reachable.",
           "Lose — Out of Time: the last Disaster Card is drawn with the target unmet.",
