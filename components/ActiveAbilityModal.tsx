@@ -50,7 +50,7 @@ export function ActiveAbilityModal({
 
         {/* Elang — intip dek Bencana atau dek Berita */}
         {role.activeKey === "recon" && (
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="@container grid gap-2 @sm:grid-cols-2">
             <Button onClick={() => fire({ deck: "disaster" })}>{id.peek.disaster}</Button>
             <Button variant="secondary" onClick={() => fire({ deck: "news" })}>
               {id.peek.news}

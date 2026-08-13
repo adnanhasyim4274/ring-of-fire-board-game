@@ -76,7 +76,11 @@ export function TurnSplash({
             type="button"
             onClick={() => setFlipped((v) => !v)}
             aria-label={flipped ? id.turnSplash.yourRole : id.turnSplash.flipHint}
-            className="relative w-[58vw] max-w-[260px] cursor-pointer"
+            /* The third term is the one that matters in landscape: sized off
+               width alone, a 2:3 card is 390px tall on a 740x360 phone, which
+               buried "Start my turn" two screens down. Capping it against the
+               viewport height too leaves portrait untouched. */
+            className="relative w-[min(58vw,260px,32vh)] cursor-pointer"
             style={{ perspective: 1200, aspectRatio: "2 / 3" }}
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}

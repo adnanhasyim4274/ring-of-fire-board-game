@@ -188,8 +188,12 @@ export default function PlayPage() {
 
   const selected = selectedTile !== null ? state.tiles[selectedTile] : null;
 
+  // The page width steps up in three stages instead of jumping from a phone
+  // column straight to the desktop grid: 448px on a phone, a fluid band from
+  // 640px, then full width capped at 72rem from the tablet breakpoint on. No
+  // size renders a narrow column stranded in the middle of a wide screen.
   return (
-    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-2.5 p-3 pb-10 lg:max-w-6xl">
+    <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-2.5 p-3 pb-10 sm:max-w-2xl md:max-w-6xl">
       <GameHud state={state} scenario={scenario} />
 
       <div className="flex justify-end">
@@ -235,9 +239,14 @@ export default function PlayPage() {
         </p>
       )}
 
-      <div className="flex flex-col gap-2.5 lg:flex-row lg:items-start">
+      {/* Two columns from the tablet breakpoint up. The phase panel is sized as
+          a fraction of the row and only capped at the old 26rem, so the board
+          column grows smoothly from 768px to 1440px with no second hard snap;
+          `items-start` keeps the short column from stretching to match the
+          tall one and leaving an empty box behind it. */}
+      <div className="flex flex-col gap-2.5 md:flex-row md:items-start">
         {/* ——— Papan cincin ——— */}
-        <section className="lg:flex-1">
+        <section className="md:min-w-0 md:flex-1">
           <RingBoard
             state={state}
             scenario={scenario}
@@ -293,8 +302,13 @@ export default function PlayPage() {
         </section>
 
         {/* ——— Panel fase ——— */}
-        <section className="lg:w-[26rem] lg:shrink-0">
-          <AnimatePresence initial={false}>
+        <section className="md:w-2/5 md:min-w-0 md:max-w-[26rem] md:shrink-0">
+          {/* `wait`, not the default sync mode. Sync mounts the incoming phase
+              card while the outgoing one is still in flow at its full height,
+              so advancing out of Phase 5 pushed the new card ~2000px down the
+              page behind a fading block, then yanked it back up when the exit
+              finished. Waiting keeps exactly one card in the column. */}
+          <AnimatePresence initial={false} mode="wait">
             <motion.div
               key={state.phase}
               initial={{ opacity: 0, y: 12 }}

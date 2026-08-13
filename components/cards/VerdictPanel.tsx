@@ -44,8 +44,11 @@ export function VerdictPanel({
     { label: id.verdict.step3, done: revealed },
   ];
 
+  // Container-based, for the same reason as the evidence hand: this panel is
+  // ~300px wide beside the board on a tablet, and pairing the verdict buttons
+  // off the viewport width squeezed them to 140px each there.
   return (
-    <div className="space-y-2.5">
+    <div className="@container space-y-2.5">
       <ol className="flex items-stretch gap-1" aria-label={id.verdict.title}>
         {steps.map((s, i) => (
           <li
@@ -96,7 +99,7 @@ export function VerdictPanel({
             {id.verdict.prompt}
           </p>
 
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 @sm:grid-cols-2">
             <VerdictButton
               verdict="hoax"
               label={id.verdict.hoax}

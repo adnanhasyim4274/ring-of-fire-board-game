@@ -26,7 +26,10 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
 
   return (
     <header className="space-y-2 rounded-2xl border border-black/10 bg-white/85 p-2.5 shadow-sm">
-      <div className="flex items-center gap-2 text-sm font-black">
+      {/* Wraps: at 320px the round, the evacuation tally and the casualty
+          count together overrun the row, and without wrapping that overflow
+          becomes a sideways scroll on the whole page. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-black">
         <Link
           href="/"
           aria-label={id.common.home}
@@ -57,7 +60,10 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
         )}
       </div>
 
-      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-3">
+      {/* `items-start`: only one of the three meters shows its warning line at
+          a time, and stretched cells handed the other two — the panic gauge
+          image especially — height they had nothing to put in. */}
+      <div className="grid items-start gap-x-3 gap-y-2 sm:grid-cols-3">
         <PanicMeter value={state.panicMeter} max={state.panicMeterMax} />
         <ReputationTrack
           value={state.reputation}

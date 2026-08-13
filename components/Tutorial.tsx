@@ -159,7 +159,7 @@ export function Tutorial({
           <button
             type="button"
             onClick={onDismiss}
-            className="flex w-full items-center justify-center gap-2 rounded-xl p-2.5 text-xs font-bold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
+            className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl p-2.5 text-xs font-bold text-stone-500 transition hover:bg-stone-100 hover:text-stone-800"
           >
             <SkipForward size={14} />
             {t.pick.skip}
@@ -215,10 +215,10 @@ export function Tutorial({
         ))}
       </div>
 
-      <p className="mt-3 text-sm leading-relaxed text-stone-700">{s.body}</p>
+      <p className="mt-3 max-w-[68ch] text-sm leading-relaxed text-stone-700">{s.body}</p>
 
       {"points" in s && s.points && (
-        <ul className="mt-3 space-y-1.5">
+        <ul className="mt-3 max-w-[68ch] space-y-1.5">
           {s.points.map((pt) => (
             <li key={pt} className="flex gap-2 text-sm leading-relaxed text-stone-700">
               <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-orange-500" />

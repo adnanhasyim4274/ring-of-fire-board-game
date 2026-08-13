@@ -65,9 +65,9 @@ export default function SetupPage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-md flex-1 space-y-5 p-4 pb-28">
+    <main className="mx-auto w-full max-w-md flex-1 space-y-5 p-4">
       <header className="flex items-center gap-2">
-        <Link href="/" aria-label={id.common.back} className="rounded-lg p-2 hover:bg-black/5">
+        <Link href="/" aria-label={id.common.back} className="-ml-1 rounded-lg p-3 hover:bg-black/5">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <h1 className="flex items-center gap-2 text-2xl font-black">
@@ -226,7 +226,11 @@ export default function SetupPage() {
         </section>
       ))}
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-black/10 bg-background/95 p-3 backdrop-blur">
+      {/* Sticky rather than fixed: a fixed bar has to be paid for with a
+          guessed padding on the page, and the bar's own height changes with
+          the hint below the button, so the guess left a dead strip at the
+          bottom. In flow it always reserves exactly its own height. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-black/10 bg-background/95 p-3 backdrop-blur">
         <div className="mx-auto max-w-md">
           <Button className="w-full text-lg" disabled={!allRolesPicked} onClick={start}>
             {id.setup.start}

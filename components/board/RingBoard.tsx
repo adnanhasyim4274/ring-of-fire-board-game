@@ -38,9 +38,15 @@ export function RingBoard({
   const rimTargets = new Set(moveOptions.filter((m) => !m.viaSeaLane).map((m) => m.index));
   const seaTargets = new Set(moveOptions.filter((m) => m.viaSeaLane).map((m) => m.index));
 
+  // The ring has to be readable as one shape, so the board fits the column it
+  // is given rather than forcing a 480px minimum and scrolling sideways inside
+  // the page — the whole point of a ring board is seeing all of it at once.
+  // The viewBox is square and so is the box below it, so the SVG scales with
+  // no letterboxing at any width, and every hit area is the same polygon as
+  // the hexagon drawn under it, so the two can never drift apart.
   return (
-    <div className="overflow-x-auto rounded-3xl border border-black/10 bg-gradient-to-b from-[#12293b] to-[#07141f] p-2 shadow-inner">
-      <div className="relative mx-auto aspect-square w-full min-w-[480px] max-w-[620px]">
+    <div className="rounded-3xl border border-black/10 bg-gradient-to-b from-[#12293b] to-[#07141f] p-2 shadow-inner">
+      <div className="mx-auto aspect-square w-full max-w-[620px]">
         <svg
           viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
           className="h-full w-full"
@@ -124,13 +130,16 @@ export function RingBoard({
             />
           ))}
         </svg>
-
       </div>
 
       {/* The Sea Lane now runs through the middle of the ring, so the Crisis
-          Zone content sits beneath the board instead of being overlaid on it. */}
+          Zone content sits beneath the board instead of being overlaid on it.
+          Capped and centred: stretched to the full width of the board it read
+          as a banner rather than as the small marker it stands in for. */}
       {centre && (
-        <div className="mt-1 flex flex-col items-center gap-1 px-2 text-center">{centre}</div>
+        <div className="mx-auto mt-1 flex w-full max-w-[22rem] flex-col items-center gap-1 px-2 text-center">
+          {centre}
+        </div>
       )}
 
       <BoardLegend seaOpen={seaOpen} />

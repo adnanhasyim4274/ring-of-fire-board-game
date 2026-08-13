@@ -28,7 +28,11 @@ export function Modal({
         >
           <motion.div
             className={
-              "max-h-[88vh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl " +
+              // dvh, not vh: vh is the tall-viewport height, so with a mobile
+              // address bar on screen an 88vh panel is taller than the fixed
+              // backdrop it is centred in, and both ends get clipped out of
+              // reach. dvh tracks the height actually on screen.
+              "max-h-[88dvh] w-full overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl " +
               (size === "lg" ? "max-w-3xl" : "max-w-md")
             }
             initial={{ scale: 0.9, y: 20 }}

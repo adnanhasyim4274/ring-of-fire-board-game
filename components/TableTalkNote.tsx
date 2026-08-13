@@ -43,11 +43,11 @@ export function TableTalkNote({ defaultOpen = false }: { defaultOpen?: boolean }
             transition={{ duration: 0.22 }}
             className="overflow-hidden"
           >
-            <div className="space-y-2 border-t border-violet-200 px-2.5 py-2">
+            <div className="@container space-y-2 border-t border-violet-200 px-2.5 py-2">
               <p className="text-[11px] font-bold italic text-violet-800">
                 {id.tableTalk.lead}
               </p>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-2 @sm:grid-cols-2">
                 <ul className="space-y-1">
                   <li className="text-[10px] font-black uppercase tracking-wide text-emerald-700">
                     {id.tableTalk.allowed}

@@ -35,7 +35,7 @@ export default function HowToPlayPage() {
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 p-4 pb-16">
       <header className="flex items-center gap-2">
-        <Link href="/" aria-label={id.common.back} className="rounded-lg p-2 hover:bg-black/5">
+        <Link href="/" aria-label={id.common.back} className="-ml-1 rounded-lg p-3 hover:bg-black/5">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
@@ -102,9 +102,12 @@ export default function HowToPlayPage() {
         <p className="text-sm leading-relaxed text-zinc-700">{s.turns.body}</p>
         <ul className="mt-2 divide-y divide-zinc-200 overflow-hidden rounded-xl border-2 border-zinc-200 bg-white">
           {s.turns.costs.map((c) => (
-            <li key={c.action} className="flex items-start justify-between gap-3 p-2">
-              <span className="text-[13px] font-bold">{c.action}</span>
-              <span className="shrink-0 text-[12px] font-black text-amber-700">{c.cost}</span>
+            <li
+              key={c.action}
+              className="flex flex-wrap items-start justify-between gap-x-3 gap-y-0.5 p-2"
+            >
+              <span className="min-w-0 text-[13px] font-bold">{c.action}</span>
+              <span className="ml-auto text-[12px] font-black text-amber-700">{c.cost}</span>
             </li>
           ))}
         </ul>
@@ -261,8 +264,8 @@ function Section({
 /** Diagram cincin yang identik dengan papan asli — 28 ubin + 4 Rute Laut. */
 function RingDiagram() {
   return (
-    <figure className="my-3 overflow-hidden rounded-2xl bg-gradient-to-b from-[#12293b] to-[#07141f] p-2">
-      <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="mx-auto w-full max-w-sm" role="img" aria-label={id.board.title}>
+    <figure className="mx-auto my-3 max-w-md overflow-hidden rounded-2xl bg-gradient-to-b from-[#12293b] to-[#07141f] p-2">
+      <svg viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`} className="w-full" role="img" aria-label={id.board.title}>
         <circle cx={CENTRE} cy={CENTRE} r={RING_RADIUS - 200} fill="#0b2233" stroke="#1d4a63" strokeWidth={3} />
         {[SEA_LANE_ENDPOINTS].map(([a, b]: [number, number]) => (
           <path

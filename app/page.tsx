@@ -128,6 +128,8 @@ export default function HomePage() {
         <img
           src={ART.boxFront}
           alt="The printed Ring of Fire board game box"
+          width={1100}
+          height={733}
           className="block h-auto w-full"
           draggable={false}
         />

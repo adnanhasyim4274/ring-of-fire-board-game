@@ -19,8 +19,11 @@ export function CrisisZoneCentre({
   panic: number;
   panicMax: number;
 }) {
+  // No `h-full`/`justify-center` any more: this used to be centred inside a
+  // square overlay on the ring, and now that it sits in the flow beneath the
+  // board those only asked the block to fill a height nothing was giving it.
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-1">
+    <div className="flex w-full flex-col items-center gap-1 px-1">
       <p className="text-[8px] font-black uppercase tracking-[0.18em] text-sky-300/70">
         {id.board.crisisZone}
       </p>

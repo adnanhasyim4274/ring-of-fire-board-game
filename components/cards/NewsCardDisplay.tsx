@@ -26,8 +26,11 @@ import { NEWS_ART } from "@/lib/newsArt";
  * BELAKANG = kunci jawaban Commit & Flip: status asli, penjelasan ilmiah,
  *            dan tanda bahaya yang seharusnya mereka kenali.
  *
- * Kedua sisi ditumpuk di sel grid yang sama supaya tinggi kartu mengikuti
- * sisi terpanjang dan tidak "melompat" saat dibalik.
+ * Kedua sisi ditumpuk di ruang 3D yang sama, tetapi hanya sisi yang SEDANG
+ * terlihat yang ikut mengatur tinggi kartu; sisi lainnya di-absolute-kan.
+ * Sebelumnya keduanya berbagi satu sel grid, sehingga tinggi kartu selalu
+ * mengikuti sisi terpanjang. Setelah sisi depan memuat gambar kartu cetak,
+ * sisi belakang jadi meregang dan meninggalkan ratusan piksel ruang kosong.
  */
 export function NewsCardDisplay({
   card,
@@ -43,17 +46,20 @@ export function NewsCardDisplay({
   return (
     <div className="flip-scene">
       <motion.div
-        className="grid"
+        className="relative"
         style={{ transformStyle: "preserve-3d" }}
         initial={false}
         animate={{ rotateY: revealed ? 180 : 0 }}
         transition={{ duration: 0.85, ease: [0.2, 0.9, 0.25, 1] }}
       >
-        <div className="flip-face col-start-1 row-start-1" aria-hidden={revealed}>
+        <div
+          className={cn("flip-face", revealed && "absolute inset-x-0 top-0")}
+          aria-hidden={revealed}
+        >
           <NewsFront card={card} locksOpened={locksOpened} sectorName={sectorName} />
         </div>
         <div
-          className="flip-face col-start-1 row-start-1"
+          className={cn("flip-face", !revealed && "absolute inset-x-0 top-0")}
           style={{ transform: "rotateY(180deg)" }}
           aria-hidden={!revealed}
         >
@@ -219,7 +225,7 @@ function NewsBack({ card }: { card: NewsCard }) {
   return (
     <article
       className={cn(
-        "h-full overflow-hidden rounded-2xl border-2 shadow-lg",
+        "@container overflow-hidden rounded-2xl border-2 shadow-lg",
         isHoax ? "border-red-700 bg-red-50" : "border-emerald-700 bg-emerald-50"
       )}
     >
@@ -259,7 +265,7 @@ function NewsBack({ card }: { card: NewsCard }) {
           <p className="mt-1 text-sm leading-snug text-amber-950">{card.redFlags}</p>
         </section>
 
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 @sm:grid-cols-2">
           <p className="rounded-lg bg-white/70 p-2 text-[11px] leading-snug text-zinc-600">
             <span className="block font-black uppercase text-zinc-400">
               {id.news.ifValidated}

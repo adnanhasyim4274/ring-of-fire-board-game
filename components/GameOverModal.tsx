@@ -45,11 +45,11 @@ export function GameOverModal({
           {id.gameOver.reasons[state.gameOverReason]}
         </p>
 
-        <section className="rounded-xl bg-zinc-100 p-3 text-left">
+        <section className="@container rounded-xl bg-zinc-100 p-3 text-left">
           <h3 className="mb-2 text-center text-[10px] font-black uppercase tracking-wide text-zinc-500">
             {id.gameOver.stats.title}
           </h3>
-          <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
+          <dl className="grid gap-x-4 gap-y-1 text-sm @sm:grid-cols-2">
             {stats.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-2">
                 <dt className="truncate text-zinc-600">{label}</dt>

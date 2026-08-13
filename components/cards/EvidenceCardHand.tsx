@@ -112,8 +112,12 @@ export function EvidenceCardHand({
     );
   }
 
+  // A container, not a viewport, decides the layout inside here: the hand
+  // renders in the phase panel, which is a fraction of the screen on a tablet
+  // and full width on a phone. Keying off `sm:` put two buttons side by side
+  // in a 300px panel purely because the screen behind it was 768px wide.
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="@container flex flex-col gap-1.5">
       <ul className="flex flex-col gap-1.5">
         {entries.map(({ key, card, hint }) => {
           const isOpen = expanded === key;
@@ -267,7 +271,7 @@ export function EvidenceCardHand({
                     )}
 
                     {/* ZONA BAWAH — buang untuk sumber daya (0 AP) / barter (1 AP) */}
-                    <div className="flex flex-col gap-1.5 sm:flex-row">
+                    <div className="flex flex-col gap-1.5 @sm:flex-row">
                       {onDiscard && (
                         <Button
                           variant="secondary"
