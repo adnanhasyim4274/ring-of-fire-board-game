@@ -1,8 +1,9 @@
 "use client";
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { AlertTriangle } from "lucide-react";
 import { ART } from "@/data/artManifest";
+import { ChangeFlash, useValueFlash } from "@/components/ActionFeedback";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 
@@ -11,12 +12,22 @@ export function PanicMeter({ value, max }: { value: number; max: number }) {
   const ratio = max > 0 ? value / max : 0;
   const danger = max - value <= 2;
   const markerPct = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
+  // A rumour spreading moves this meter and nothing else on screen, which
+  // playtesters missed. Flash red when it climbs, green when it is talked back
+  // down, so it is obvious which of the three meters just moved.
+  const { pulseKey, direction } = useValueFlash(value);
+  const reduced = useReducedMotion() === true;
 
   return (
     <div
-      className="flex gap-2"
+      className="relative flex gap-2"
       aria-label={`${id.hud.panicMeter}: ${value} ${id.common.of} ${max}`}
     >
+      <ChangeFlash
+        key={`flash-${pulseKey}`}
+        pulseKey={pulseKey}
+        tone={direction === "up" ? "bad" : "good"}
+      />
       {/* The printed gauge from the physical game, blue at the foot and red at
           the top, with a marker at the current level. Purely decorative: the
           reading is the number and the segment strip to the right of it. The
@@ -30,15 +41,23 @@ export function PanicMeter({ value, max }: { value: number; max: number }) {
         />
       </div>
 
-      <div className="flex flex-1 flex-col gap-1">
+      <div className="relative flex flex-1 flex-col gap-1">
         <div className="flex items-center gap-1 text-[11px] font-black uppercase tracking-wide">
           <AlertTriangle
             className={cn("h-4 w-4", danger ? "panic-pulse text-red-600" : "text-orange-500")}
           />
           <span className="text-zinc-600">{id.hud.panicMeter}</span>
-          <span className={cn("ml-auto text-sm tabular-nums", danger ? "text-red-600" : "text-zinc-800")}>
+          {/* Re-mounted on every change (the key) so the reading pops once and
+              settles. Same text, same numbers, same label. */}
+          <motion.span
+            key={`panic-${pulseKey}`}
+            initial={pulseKey === 0 || reduced ? false : { scale: 1.35 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 520, damping: 18 }}
+            className={cn("ml-auto text-sm tabular-nums", danger ? "text-red-600" : "text-zinc-800")}
+          >
             {value}/{max}
-          </span>
+          </motion.span>
         </div>
         <div className="flex gap-0.5" aria-hidden>
           {Array.from({ length: max }).map((_, i) => {

@@ -1,5 +1,6 @@
 "use client";
 import { memo } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Player, TileState } from "@/engine/types";
 import {
   READY_POST_COLOR,
@@ -12,6 +13,8 @@ import {
   CRISIS_COLOR,
 } from "@/lib/theme";
 import {
+  CENTRE,
+  HEX_RADIUS,
   seaLaneHexPoints,
   seaLaneTileCentre,
   tileCentre,
@@ -48,6 +51,18 @@ const GLYPH_PATH: Record<string, string> = {
   lane: "M -16 9 q 8 -9 16 0 q 8 9 16 0 M 0 -16 L 0 3 M -7 -9 L 0 -16 L 7 -9",
 };
 
+/**
+ * Three board cues answer three different questions, so each one owns a
+ * different *shape* language and never just a different colour (WCAG 1.4.1):
+ *
+ *   "where am I?"        double concentric ring + a "You are here" callout pill
+ *   "where can I go?"    one solid ring + a big pulsing FOOTPRINT badge
+ *   "what does the card  diagonal HATCH across the hex + a dotted ring
+ *    mean on the board?"
+ *
+ * Double ring vs single ring vs dotted ring, and pill vs footprint vs hatch:
+ * a player who cannot see colour at all still gets three separate answers.
+ */
 export interface RingTileProps {
   tile: TileState;
   ringSize: number;
@@ -62,6 +77,16 @@ export interface RingTileProps {
   isMoveTarget: boolean;
   isSeaTarget: boolean;
   isNewsTarget: boolean;
+  /**
+   * Id of the Guardian whose turn it is. Optional: left out, no tile claims the
+   * "You are here" treatment and the board renders exactly as it did before.
+   */
+  currentPlayerId?: string;
+  /**
+   * True when the active Disaster or News card names this tile's sector.
+   * Optional and off by default; RingBoard derives it from `state`.
+   */
+  isCardTarget?: boolean;
   onSelect: (index: number) => void;
 }
 
@@ -78,8 +103,14 @@ function RingTileImpl({
   isMoveTarget,
   isSeaTarget,
   isNewsTarget,
+  currentPlayerId,
+  isCardTarget = false,
   onSelect,
 }: RingTileProps) {
+  // `null` before the media query has been read, so compare explicitly. The
+  // play page only mounts the board after hydration, so there is no SSR pass
+  // to disagree with.
+  const reduceMotion = useReducedMotion() === true;
   // Sea Lane tiles sit on a chord through the middle, not on the ring circle.
   const onLane = tile.isSeaLane && seaLaneOrder >= 0;
   const centre = onLane
@@ -88,8 +119,34 @@ function RingTileImpl({
   const points = onLane
     ? seaLaneHexPoints(seaLaneOrder, seaLaneCount, seaLaneEndpoints[0], seaLaneEndpoints[1], ringSize)
     : tileHexPoints(tile.index, ringSize);
+  // Second hexagon, 11 units wider, for the outer half of the "You are here"
+  // double ring. Same helper, same rotation — the two can never drift apart.
+  const haloPoints = onLane
+    ? seaLaneHexPoints(
+        seaLaneOrder,
+        seaLaneCount,
+        seaLaneEndpoints[0],
+        seaLaneEndpoints[1],
+        ringSize,
+        HEX_RADIUS + 11
+      )
+    : tileHexPoints(tile.index, ringSize, HEX_RADIUS + 11);
   const hancur = tile.damage === 2;
   const retak = tile.damage === 1;
+
+  // Is the Guardian holding the device standing on this tile?
+  const youAreHere =
+    currentPlayerId !== undefined && players.some((p) => p.id === currentPlayerId);
+
+  // The "You are here" pill sits INWARD of the tile, in the empty band between
+  // the rim and the Crisis Zone disc. Placing it above the tile would push the
+  // pill off the top of the viewBox for tile 0. The middle Sea Lane tile sits
+  // exactly on the centre, where "inward" has no direction, so fall back to up.
+  const inwardDistance = Math.hypot(CENTRE - centre.x, CENTRE - centre.y);
+  const inwardX = inwardDistance > 1 ? (CENTRE - centre.x) / inwardDistance : 0;
+  const inwardY = inwardDistance > 1 ? (CENTRE - centre.y) / inwardDistance : -1;
+  const calloutX = centre.x + inwardX * 96;
+  const calloutY = centre.y + inwardY * 96;
 
   const fill = tile.isSeaLane
     ? SEA_LANE_COLOR
@@ -116,6 +173,7 @@ function RingTileImpl({
   // Printed artwork for this hex. The mapping lives in lib/tileArt.ts.
   const artSrc = tileArtworkSrc(tile);
   const clipId = `rof-hex-clip-${tile.index}`;
+  const hatchId = `rof-card-hatch-${tile.index}`;
   // A destroyed tile is darkened, a closed Sea Lane is faded out.
   const bodyOpacity = hancur ? 0.9 : onLane && !seaLaneOpen ? 0.35 : 1;
 
@@ -124,8 +182,12 @@ function RingTileImpl({
   const shown = [...panicked, ...calm].slice(0, 3);
   const overflow = tile.occupants.length - shown.length;
 
+  // Every clause that used to be here is still here, in the same order. The
+  // three new cues are appended, because a cue that is only visual is not a
+  // cue for a screen reader user.
   const label = [
     regionName ?? `${id.board.title} ${tile.index}`,
+    youAreHere ? id.feedback.youAreHere : null,
     tile.isSeaLane
       ? id.board.seaLane
       : tile.isReadyPost
@@ -138,6 +200,7 @@ function RingTileImpl({
     calm.length ? `${calm.length} ${id.board.calm}` : null,
     panicked.length ? `${panicked.length} ${id.board.panicked}` : null,
     isMoveTarget || isSeaTarget ? id.board.moveTarget : null,
+    isCardTarget ? id.feedback.cardTarget : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -169,6 +232,22 @@ function RingTileImpl({
         <clipPath id={clipId}>
           <polygon points={points} />
         </clipPath>
+        {/* Both stripes sit fully inside the 20-unit tile: a stroke centred on
+            x=0 would have its outer half clipped by the pattern box and the
+            hatch would come out half weight. Light stripe next to dark, so the
+            texture survives on both the pale and the dark paintings. */}
+        {isCardTarget && (
+          <pattern
+            id={hatchId}
+            width={20}
+            height={20}
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line x1={4} y1={0} x2={4} y2={20} stroke="#ffffff" strokeWidth={6} opacity={0.5} />
+            <line x1={11} y1={0} x2={11} y2={20} stroke="#160604" strokeWidth={4} opacity={0.45} />
+          </pattern>
+        )}
       </defs>
       <polygon points={points} fill={hancur ? "#1b1b1f" : fill} />
       {/* Decorative: the <g> above already names the region, sector and state. */}
@@ -192,6 +271,15 @@ function RingTileImpl({
         strokeDasharray={onLane && !seaLaneOpen ? "10 8" : undefined}
         opacity={bodyOpacity}
       />
+
+      {/* CARD → TILE, part 1: a light/dark diagonal hatch laid across the whole
+          hexagon. Texture, not colour, so the "the card is talking about THIS
+          patch of the board" reading survives greyscale — and it is a fill,
+          which neither of the other two cues ever uses. Drawn under the tokens
+          so villagers and Guardians stay readable on top of it. */}
+      {isCardTarget && !hancur && (
+        <polygon points={points} fill={`url(#${hatchId})`} clipPath={`url(#${clipId})`} />
+      )}
 
       {/* Watermark ikon sektor — isyarat non-warna */}
       <path
@@ -249,6 +337,45 @@ function RingTileImpl({
             strokeLinecap="round"
           />
         </>
+      )}
+
+      {/* WHERE CAN I GO, part 1: the footprint. It used to be a 16px lucide
+          glyph buried in the side panel — playtesters never spotted it. Now it
+          is a ~60 unit badge sitting on the destination tile itself, white on a
+          dark disc so it holds up over any sector artwork, and it breathes so
+          it reads as an invitation rather than as printed decoration.
+          Under the tokens, so nothing it covers is information. */}
+      {(isMoveTarget || isSeaTarget) && !hancur && (
+        <motion.g
+          style={{
+            transformBox: "view-box",
+            transformOrigin: `${centre.x}px ${centre.y - 4}px`,
+          }}
+          animate={reduceMotion ? undefined : { scale: [1, 1.16, 1] }}
+          transition={
+            reduceMotion
+              ? undefined
+              : { duration: 1.3, repeat: Infinity, ease: "easeInOut" }
+          }
+          aria-hidden
+        >
+          {/* Reduced motion keeps this exact frame: full-opacity disc, 4-unit
+              ring, solid white feet. The animation only ever dips away from the
+              strongest state, never towards it. */}
+          <circle cx={centre.x} cy={centre.y - 4} r={30} fill="#08130E" opacity={0.82} />
+          <circle
+            cx={centre.x}
+            cy={centre.y - 4}
+            r={30}
+            fill="none"
+            stroke={isSeaTarget && !isMoveTarget ? SEA_LANE_COLOR : "#34D399"}
+            strokeWidth={4}
+          />
+          <g transform={`translate(${centre.x} ${centre.y - 4})`}>
+            <Foot x={-12} y={9} angle={-14} />
+            <Foot x={10} y={-9} angle={-14} />
+          </g>
+        </motion.g>
       )}
 
       {/* Token Warga: bentuk + warna + ikon, bukan warna saja */}
@@ -347,16 +474,40 @@ function RingTileImpl({
         />
       )}
 
-      {/* Standee pemain */}
+      {/* Standee pemain. One <g> per Guardian instead of one run of emoji, so
+          the Guardian whose turn it is can be built differently rather than
+          merely tinted: bigger silhouette, a white standee base, and a second
+          outline ring around it. Size + double outline, no colour involved. */}
       {players.length > 0 && (
-        <text
-          x={centre.x}
-          y={centre.y + 36}
-          textAnchor="middle"
-          fontSize={players.length > 2 ? 18 : 24}
-        >
-          {players.map((p) => emojiForRole(p.roleId)).join("")}
-        </text>
+        <g>
+          {players.map((p, i) => {
+            const isYou = p.id === currentPlayerId;
+            const step = players.length > 2 ? 27 : 34;
+            const x = centre.x + (i - (players.length - 1) / 2) * step;
+            const y = centre.y + 36;
+            return (
+              <g key={p.id}>
+                {isYou ? (
+                  <>
+                    <circle cx={x} cy={y - 8} r={19} fill="#0B1220" />
+                    <circle cx={x} cy={y - 8} r={19} fill="none" stroke="#ffffff" strokeWidth={4} />
+                    <circle cx={x} cy={y - 8} r={24} fill="none" stroke="#0B1220" strokeWidth={3} />
+                  </>
+                ) : (
+                  <circle cx={x} cy={y - 6} r={12} fill="#0B1220" opacity={0.5} />
+                )}
+                <text
+                  x={x}
+                  y={isYou ? y + 2 : y}
+                  textAnchor="middle"
+                  fontSize={isYou ? 27 : players.length > 2 ? 16 : 19}
+                >
+                  {emojiForRole(p.roleId)}
+                </text>
+              </g>
+            );
+          })}
+        </g>
       )}
 
       {/* Nomor ubin — kait cepat saat diskusi di meja */}
@@ -372,31 +523,82 @@ function RingTileImpl({
         {tile.index}
       </text>
 
-      {/* Sorotan status */}
-      {isNewsTarget && (
-        <polygon
-          points={points}
-          fill="none"
-          stroke={CRISIS_COLOR}
-          strokeWidth={7}
-          className="panic-pulse"
-          style={{ transformOrigin: `${centre.x}px ${centre.y}px` }}
-        />
+      {/* Sorotan status. Four rings, four dash patterns, so they stay separable
+          in greyscale:
+            card target  · · · · beads (round caps on a hairline dash)
+            move target  ——————— solid
+            Sea crossing – – – –  long dash
+            you are here ═══════ two concentric solid rings
+          Every ring is drawn over a darker, wider copy of itself so it keeps
+          its contrast on both the pale and the dark tile paintings. */}
+
+      {/* CARD → TILE, part 3: the bead ring. Static for the rest of the named
+          sector, pulsing on the single tile the News card points at. */}
+      {(isCardTarget || isNewsTarget) && (
+        <>
+          <polygon
+            points={points}
+            fill="none"
+            stroke="#160604"
+            strokeWidth={13}
+            strokeDasharray="0.1 22"
+            strokeLinecap="round"
+            opacity={0.85}
+          />
+          <motion.polygon
+            points={points}
+            fill="none"
+            stroke={CRISIS_COLOR}
+            strokeWidth={9}
+            strokeDasharray="0.1 22"
+            strokeLinecap="round"
+            animate={
+              isNewsTarget && !reduceMotion ? { strokeOpacity: [1, 0.3, 1] } : undefined
+            }
+            transition={
+              isNewsTarget && !reduceMotion
+                ? { duration: 1.2, repeat: Infinity, ease: "easeInOut" }
+                : undefined
+            }
+          />
+        </>
       )}
-      {isMoveTarget && !isSelected && (
-        <polygon points={points} fill="none" stroke="#34D399" strokeWidth={7} />
+
+      {/* WHERE CAN I GO, part 2: the ring around the destination. */}
+      {(isMoveTarget || isSeaTarget) && !isSelected && (
+        <>
+          <polygon points={points} fill="none" stroke="#04241A" strokeWidth={13} opacity={0.8} />
+          <motion.polygon
+            points={points}
+            fill="none"
+            stroke={isSeaTarget && !isMoveTarget ? SEA_LANE_COLOR : "#34D399"}
+            strokeWidth={9}
+            strokeDasharray={isSeaTarget && !isMoveTarget ? "18 10" : undefined}
+            animate={reduceMotion ? undefined : { strokeOpacity: [1, 0.45, 1] }}
+            transition={
+              reduceMotion
+                ? undefined
+                : { duration: 1.3, repeat: Infinity, ease: "easeInOut" }
+            }
+          />
+        </>
       )}
-      {isSeaTarget && !isSelected && (
-        <polygon
-          points={points}
-          fill="none"
-          stroke={SEA_LANE_COLOR}
-          strokeWidth={7}
-          strokeDasharray="14 8"
-        />
-      )}
+
       {isSelected && (
         <polygon points={points} fill="none" stroke="#ffffff" strokeWidth={8} />
+      )}
+
+      {/* WHERE AM I, part 1: the double ring. Drawn after everything else so a
+          selected or targeted tile still shows it, and offset outward as well
+          as traced on the hex itself — two concentric outlines are a shape no
+          other cue on this board uses. */}
+      {youAreHere && (
+        <g aria-hidden>
+          <polygon points={haloPoints} fill="none" stroke="#0B1220" strokeWidth={12} opacity={0.9} />
+          <polygon points={haloPoints} fill="none" stroke="#ffffff" strokeWidth={6} />
+          <polygon points={points} fill="none" stroke="#0B1220" strokeWidth={10} opacity={0.9} />
+          <polygon points={points} fill="none" stroke="#ffffff" strokeWidth={5} />
+        </g>
       )}
 
       {/* Area sentuh penuh heksagon — tetap di atas semua dekorasi */}
@@ -409,6 +611,77 @@ function RingTileImpl({
         strokeWidth={5}
         className="opacity-0 group-focus-visible:opacity-100"
       />
+
+      {/* WHERE AM I, part 2: a permanent worded marker, not a hover tooltip and
+          not a colour. It leans inward, into the empty band between the rim and
+          the Crisis Zone, because anchoring it above the hex would push it off
+          the top of the viewBox for the tiles at 12 o'clock. RingBoard draws
+          this tile last so the pill is never buried under a neighbour. */}
+      {youAreHere && (
+        <g aria-hidden>
+          <line
+            x1={centre.x + inwardX * 54}
+            y1={centre.y + inwardY * 54}
+            x2={centre.x + inwardX * 74}
+            y2={centre.y + inwardY * 74}
+            stroke="#0B1220"
+            strokeWidth={10}
+            strokeLinecap="round"
+          />
+          <line
+            x1={centre.x + inwardX * 54}
+            y1={centre.y + inwardY * 54}
+            x2={centre.x + inwardX * 74}
+            y2={centre.y + inwardY * 74}
+            stroke="#ffffff"
+            strokeWidth={4.5}
+            strokeLinecap="round"
+          />
+          <rect
+            x={calloutX - 118}
+            y={calloutY - 24}
+            width={236}
+            height={48}
+            rx={24}
+            fill="#0B1220"
+            stroke="#ffffff"
+            strokeWidth={4}
+          />
+          <g transform={`translate(${calloutX - 88} ${calloutY - 8})`}>
+            <path
+              d="M 0 15 C 0 15 -9.5 2 -9.5 -5 a 9.5 9.5 0 1 1 19 0 C 9.5 2 0 15 0 15 Z"
+              fill="#ffffff"
+            />
+            <circle cx={0} cy={-5} r={3.6} fill="#0B1220" />
+          </g>
+          <text
+            x={calloutX + 20}
+            y={calloutY + 10}
+            textAnchor="middle"
+            fontSize={28}
+            fontWeight={900}
+            fill="#ffffff"
+          >
+            {id.feedback.youAreHere}
+          </text>
+        </g>
+      )}
+    </g>
+  );
+}
+
+/**
+ * One footprint — sole plus three toes — drawn about its own origin, roughly
+ * 22 units tall. Two of these, offset and toed in the same direction, read as
+ * somebody walking; a single one just reads as a blob.
+ */
+function Foot({ x, y, angle }: { x: number; y: number; angle: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${angle})`}>
+      <ellipse cx={0} cy={2.5} rx={6.4} ry={9.8} fill="#ffffff" />
+      <circle cx={-4} cy={-9.6} r={2.2} fill="#ffffff" />
+      <circle cx={0.2} cy={-11.4} r={2.4} fill="#ffffff" />
+      <circle cx={4.3} cy={-9.8} r={2.2} fill="#ffffff" />
     </g>
   );
 }

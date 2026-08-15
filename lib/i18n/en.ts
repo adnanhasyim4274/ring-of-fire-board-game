@@ -112,6 +112,26 @@ export const en = {
     },
   },
 
+  /**
+   * Playtesters could not tell where their Guardian was, what an action had
+   * just done, or which tile a card was talking about. These strings exist so
+   * the board can answer all three without anyone opening the rulebook.
+   */
+  feedback: {
+    youAreHere: "You are here",
+    yourGuardian: "Your Guardian",
+    otherGuardian: "Another Guardian",
+    cardTarget: "This card targets here",
+    cardTargetHint: "The sector named on the active card is outlined on the board.",
+    lastAction: "Just happened",
+    nothingYet: "No action taken yet this turn",
+    apSpent: "AP spent",
+    apLeft: "AP left",
+    moveHint: "Tap a highlighted tile to move there",
+    reference: "Cards & terms",
+    referenceHint: "Every component and every term used in the game, in one place.",
+  },
+
   hud: {
     phaseNav: "Round phases",
     panicMeter: "Panic Meter",

@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowRight,
   BookOpen,
+  Library,
   Eye,
   EyeOff,
   Flame,
@@ -50,6 +51,7 @@ import { ActiveAbilityModal } from "@/components/ActiveAbilityModal";
 import { PeekModal } from "@/components/PeekModal";
 import { GameOverModal } from "@/components/GameOverModal";
 import { Tutorial, useTutorial } from "@/components/Tutorial";
+import { ReferenceModal, useReference } from "@/components/ReferenceModal";
 import { TurnSplash } from "@/components/TurnSplash";
 import { LogPanel } from "@/components/LogPanel";
 import { DebugPanel } from "@/components/DebugPanel";
@@ -78,6 +80,14 @@ export default function PlayPage() {
     dismiss: dismissTutorial,
     firstTime: tutorialFirstTime,
   } = useTutorial();
+  // Playtesters said the How to Play page "did not exist" because it lives off
+  // the board. The card and term reference would have the same fate, so it is
+  // reachable from here too.
+  const {
+    open: refOpen,
+    setOpen: setRefOpen,
+    dismiss: dismissRef,
+  } = useReference();
   // Cleared on every phase/turn change below, so the splash appears once per turn.
   const [splashDone, setSplashDone] = useState(false);
 
@@ -205,7 +215,17 @@ export default function PlayPage() {
           <BookOpen size={13} />
           {id.tutorial.reopen}
         </button>
+        <button
+          type="button"
+          onClick={() => setRefOpen(true)}
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-[11px] font-bold text-zinc-600 transition hover:border-zinc-400 hover:text-zinc-900"
+        >
+          <Library size={13} />
+          {id.feedback.reference}
+        </button>
       </div>
+
+      <ReferenceModal open={refOpen} onClose={dismissRef} />
 
       <Tutorial
         open={tutorialOpen}

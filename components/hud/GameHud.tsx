@@ -8,6 +8,7 @@ import { PanicMeter } from "@/components/hud/PanicMeter";
 import { ReputationTrack } from "@/components/hud/ReputationTrack";
 import { DisasterDeckCounter } from "@/components/hud/DisasterDeckCounter";
 import { APCounter } from "@/components/hud/APCounter";
+import { ActionFeedback } from "@/components/ActionFeedback";
 import { isSeaLaneOpen, targetEvacuation } from "@/lib/engineBridge";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
@@ -99,6 +100,11 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
           </span>
         )}
       </div>
+
+      {/* The result of the last tap, in the engine's own words, directly under
+          the numbers it just moved — the one place on the page everybody is
+          already looking. Renders nothing at all before the first entry. */}
+      <ActionFeedback log={state.log} ap={current ? current.ap : undefined} />
     </header>
   );
 }

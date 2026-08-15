@@ -1,6 +1,7 @@
 "use client";
 import type { ReactNode } from "react";
-import type { GameState, Scenario } from "@/engine/types";
+import { Footprints } from "lucide-react";
+import type { GameState, Scenario, SectorId } from "@/engine/types";
 import { isSeaLaneOpen, type MoveOption } from "@/lib/engineBridge";
 import {
   CENTRE,
@@ -20,6 +21,7 @@ export function RingBoard({
   moveOptions,
   onSelectTile,
   centre,
+  currentPlayerId,
 }: {
   state: GameState;
   scenario: Scenario;
@@ -28,6 +30,12 @@ export function RingBoard({
   onSelectTile: (index: number) => void;
   /** Isi Zona Krisis — Kartu Bencana + Kartu Berita aktif. */
   centre?: ReactNode;
+  /**
+   * Whose "You are here" marker to draw. Optional: it defaults to the Guardian
+   * whose turn it is, which is already in `state`, so the call site does not
+   * have to pass anything. Override it only to point the marker somewhere else.
+   */
+  currentPlayerId?: string;
 }) {
   const ringSize = scenario.ringSize;
   const [seaA, seaB] = scenario.seaLaneEndpoints ?? [0, Math.floor(ringSize / 2)];
@@ -37,6 +45,33 @@ export function RingBoard({
   const seaOpen = isSeaLaneOpen(state);
   const rimTargets = new Set(moveOptions.filter((m) => !m.viaSeaLane).map((m) => m.index));
   const seaTargets = new Set(moveOptions.filter((m) => m.viaSeaLane).map((m) => m.index));
+
+  // Both cards already carry their target on `state`, so nothing new has to be
+  // threaded down from the page: the News card names one sector, the Disaster
+  // card names a list. An EMPTY `affectedSectorIds` means "every sector", and
+  // outlining all 24 tiles at once would say nothing, so it highlights none.
+  const cardSectors = new Set<SectorId>();
+  if (state.activeNews) cardSectors.add(state.activeNews.targetSectorId);
+  for (const s of state.activeDisaster?.affectedSectorIds ?? []) cardSectors.add(s);
+  const cardSectorNames = scenario.sectors
+    .filter((s) => cardSectors.has(s.id))
+    .map((s) => s.name);
+
+  // Which Guardian gets the "You are here" marker, and which tile that is.
+  const youId = currentPlayerId ?? state.players[state.currentPlayerIndex]?.id;
+  const youTile = state.players.find((p) => p.id === youId)?.position ?? null;
+
+  // That tile is drawn LAST. The "You are here" callout deliberately spills
+  // past its own hexagon, and inside one SVG later siblings paint on top, so
+  // without this the pill would slide under whichever neighbour has a higher
+  // index. Keys are tile indices, so reordering costs nothing in React.
+  const drawOrder =
+    youTile === null
+      ? state.tiles
+      : [
+          ...state.tiles.filter((t) => t.index !== youTile),
+          ...state.tiles.filter((t) => t.index === youTile),
+        ];
 
   // The ring has to be readable as one shape, so the board fits the column it
   // is given rather than forcing a 480px minimum and scrolling sideways inside
@@ -111,7 +146,7 @@ export function RingBoard({
           )}
 
           {/* 27 hex tiles: 24 on the rim, 3 on the Sea Lane */}
-          {state.tiles.map((tile) => (
+          {drawOrder.map((tile) => (
             <RingTile
               key={tile.index}
               tile={tile}
@@ -126,11 +161,35 @@ export function RingBoard({
               isMoveTarget={rimTargets.has(tile.index)}
               isSeaTarget={seaTargets.has(tile.index)}
               isNewsTarget={state.newsTileIndex === tile.index && !state.newsRevealed}
+              currentPlayerId={youId}
+              isCardTarget={tile.sectorId !== null && cardSectors.has(tile.sectorId)}
               onSelect={onSelectTile}
             />
           ))}
         </svg>
       </div>
+
+      {/* CARD → TILE, in words. Playtesters could read "Sunda Arc" on a card and
+          still not know which hexagons that was, so the sector is named here in
+          the same breath as the beaded ring that marks it on the board. */}
+      {cardSectorNames.length > 0 && (
+        <p className="mx-auto mt-1.5 flex w-full max-w-[24rem] items-center justify-center gap-1.5 rounded-xl border-2 border-dotted border-lava px-2 py-1 text-[11px] font-bold leading-snug text-orange-100">
+          <span aria-hidden className="shrink-0">
+            <CardTargetSwatch />
+          </span>
+          <span>
+            {id.feedback.cardTarget}: {cardSectorNames.join(" · ")}
+          </span>
+        </p>
+      )}
+
+      {/* WHERE CAN I GO, in words. */}
+      {moveOptions.length > 0 && (
+        <p className="mt-1.5 flex items-center justify-center gap-1.5 text-center text-[11px] font-bold text-emerald-200">
+          <Footprints className="h-4 w-4 shrink-0" aria-hidden />
+          {id.feedback.moveHint}
+        </p>
+      )}
 
       {/* The Sea Lane now runs through the middle of the ring, so the Crisis
           Zone content sits beneath the board instead of being overlaid on it.
@@ -147,8 +206,43 @@ export function RingBoard({
   );
 }
 
+/**
+ * The hatch-and-dots swatch that stands for "a card names this sector". Drawn
+ * with a background image rather than a colour block so it still reads as a
+ * distinct texture in greyscale, exactly like the hatch on the board.
+ */
+function CardTargetSwatch() {
+  return (
+    <span
+      className="inline-block h-3 w-3 rounded-[2px] border-2 border-dotted border-lava"
+      style={{
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(255,255,255,0.85) 0 2px, transparent 2px 5px)",
+      }}
+    />
+  );
+}
+
 function BoardLegend({ seaOpen }: { seaOpen: boolean }) {
   const items: { label: string; swatch: ReactNode }[] = [
+    // The three cues the playtesters asked for come first — they are what a
+    // player needs on turn one, ahead of the token vocabulary.
+    {
+      label: id.feedback.youAreHere,
+      swatch: (
+        <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-white">
+          <span className="block h-1.5 w-1.5 rounded-full border border-white" />
+        </span>
+      ),
+    },
+    {
+      label: id.board.moveTarget,
+      swatch: <Footprints className="h-3.5 w-3.5 text-emerald-300" />,
+    },
+    {
+      label: id.feedback.cardTarget,
+      swatch: <CardTargetSwatch />,
+    },
     {
       label: id.board.calm,
       swatch: <span className="inline-block h-3 w-3 rounded-full border-2 border-emerald-600 bg-white" />,
@@ -183,6 +277,9 @@ function BoardLegend({ seaOpen }: { seaOpen: boolean }) {
           {it.label}
         </li>
       ))}
+      <li className="w-full text-center font-normal text-sky-200/60">
+        {id.feedback.cardTargetHint}
+      </li>
     </ul>
   );
 }

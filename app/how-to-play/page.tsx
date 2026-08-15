@@ -1,36 +1,118 @@
 "use client";
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
   BookOpen,
+  Boxes,
   Check,
   Gavel,
+  Library,
+  Map as MapIcon,
   Play,
+  Search,
   Target,
   Users,
   X,
   Zap,
 } from "lucide-react";
+import { ART } from "@/data/artManifest";
 import { roles } from "@/data/roles";
+import { ringOfFireScenario } from "@/data/scenarios";
+import { tileTypeById } from "@/data/tileTypes";
 import { Button } from "@/components/ui/Button";
 import { PHASE_ORDER } from "@/components/hud/PhaseIndicator";
 import { OutcomeBanner } from "@/components/cards/OutcomeBanner";
+import {
+  ComponentGroupBlock,
+  ReferenceModal,
+  TermGroupBlock,
+  useReference,
+} from "@/components/ReferenceModal";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
+import { COMPONENTS, REFERENCE_LABELS, TERMS } from "@/lib/reference";
 import { SECTOR_COLOR } from "@/lib/theme";
+import { TILE_ART, type TileArtKey } from "@/lib/tileArt";
 import { CENTRE, RING_RADIUS, VIEWBOX, seaLanePath, tileHexPoints } from "@/lib/ring";
 
 const RING_SIZE = 24;
 const READY_POSTS = [0, 4, 8, 12, 16, 20];
+/** Normal → Cracked → Destroyed, in the order the board applies them. */
+const DAMAGE_STAGES = [0, 1, 2] as const;
 const SEA_LANE_ENDPOINTS: [number, number] = [0, 12];
 const SECTOR_ORDER = ["sunda", "philippine", "hokkaido", "cascadia", "andes", "south_pacific"] as const;
 const sectorOf = (i: number) => SECTOR_ORDER[Math.floor(i / 4) % 6];
 
+/**
+ * Playtest note: "the image for the Sea Lane tiles seems to be missing from the
+ * explanation section." It was — the legend under the ring diagram drew the Sea
+ * Lane as a dashed line and nothing else, and no tile showed its printed
+ * painting at all. This gallery is built from `TILE_ART`, so every hex kind on
+ * the board (the six sectors, the Ready Posts and the Sea Lane) is guaranteed a
+ * picture: adding a key without artwork would not compile.
+ */
+interface TileGalleryEntry {
+  key: TileArtKey;
+  title: string;
+  subtitle: string;
+  /** Terrain names for a sector, the rules hint for a Ready Post or Sea Lane. */
+  note: string;
+  /** Only the sectors label their note, because only theirs is a terrain list. */
+  noteLabel?: string;
+  swatch: string;
+  src: string;
+  immune: boolean;
+}
+
+function buildTileGallery(): TileGalleryEntry[] {
+  const scenario = ringOfFireScenario;
+  const sectors: TileGalleryEntry[] = scenario.sectors.map((sector) => ({
+    key: sector.id,
+    title: sector.name,
+    subtitle: sector.region,
+    note: [
+      ...new Set(sector.tileIndices.map((i) => tileTypeById[scenario.layout[i]].name)),
+    ].join(" · "),
+    noteLabel: REFERENCE_LABELS.tiles.terrainLabel,
+    swatch: SECTOR_COLOR[sector.id],
+    src: ART.tile[TILE_ART[sector.id]].normal,
+    immune: false,
+  }));
+
+  return [
+    ...sectors,
+    {
+      key: "ready_post",
+      title: id.board.posSiaga,
+      subtitle: `${scenario.readyPostIndices.length} × ${id.board.posSiaga}`,
+      note: id.board.posSiagaHint,
+      swatch: "#2B2F38",
+      src: ART.tile[TILE_ART.ready_post].normal,
+      immune: true,
+    },
+    {
+      key: "sea_lane",
+      title: id.board.seaRoute,
+      subtitle: `${scenario.seaLaneIndices.length} × ${id.board.seaRoute}`,
+      note: id.board.seaRouteHint,
+      swatch: "#7B4FA8",
+      src: ART.tile[TILE_ART.sea_lane].normal,
+      immune: true,
+    },
+  ];
+}
+
+const tileGallery = buildTileGallery();
+
+/** The painting used for the damage strip: the volcanic arc, which can be hit. */
+const damageArt = ART.tile[TILE_ART.cascadia];
 
 export default function HowToPlayPage() {
   const s = id.howTo.sections;
+  const reference = useReference();
 
   return (
     <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 p-4 pb-16">
@@ -46,6 +128,23 @@ export default function HowToPlayPage() {
           <p className="text-xs font-bold text-zinc-500">{id.howTo.subtitle}</p>
         </div>
       </header>
+
+      {/* Playtesters wanted one place that explains every card and every term,
+          reachable without scrolling the whole page. */}
+      <Button
+        variant="secondary"
+        onClick={() => reference.setOpen(true)}
+        className="flex w-full items-center gap-2 text-left"
+      >
+        <Search className="h-4 w-4 shrink-0 text-lava" />
+        <span className="min-w-0">
+          <span className="block text-sm font-black">{id.feedback.reference}</span>
+          <span className="block text-[11px] font-bold text-zinc-500">
+            {id.feedback.referenceHint}
+          </span>
+        </span>
+      </Button>
+      <ReferenceModal open={reference.open} onClose={reference.dismiss} />
 
       {/* Tujuan */}
       <Section title={s.goal.title} icon={<Target className="h-4 w-4" />}>
@@ -72,6 +171,64 @@ export default function HowToPlayPage() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      {/* Every tile kind, with its printed painting — Sea Lane included. */}
+      <Section title={REFERENCE_LABELS.tiles.heading} icon={<MapIcon className="h-4 w-4" />}>
+        <p className="text-sm leading-relaxed text-zinc-700">{REFERENCE_LABELS.tiles.body}</p>
+        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+          {tileGallery.map((t) => (
+            <li
+              key={t.key}
+              className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
+            >
+              <TileArtwork src={t.src} swatch={t.swatch} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black">{t.title}</span>
+                <span className="block text-[11px] font-bold text-zinc-400">{t.subtitle}</span>
+                <span className="mt-1 block text-[12px] leading-snug text-zinc-700">
+                  {t.noteLabel ? (
+                    <b className="text-zinc-500">{t.noteLabel} · </b>
+                  ) : null}
+                  {t.note}
+                </span>
+                {t.immune ? (
+                  <span className="mt-1 inline-block rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                    {REFERENCE_LABELS.tiles.immune}
+                  </span>
+                ) : null}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <h3 className="mt-4 text-sm font-black uppercase tracking-wide text-lava">
+          {REFERENCE_LABELS.tiles.damageHeading}
+        </h3>
+        <p className="mt-0.5 text-[12px] leading-snug text-zinc-600">
+          {REFERENCE_LABELS.tiles.damageBody}
+        </p>
+        <ul className="mt-2 grid grid-cols-3 gap-2">
+          {DAMAGE_STAGES.map((stage) => (
+            <li
+              key={stage}
+              className="rounded-xl border-2 border-zinc-200 bg-white p-2 text-center"
+            >
+              <TileArtwork
+                src={stage === 2 ? damageArt.destroyed : damageArt.normal}
+                swatch={SECTOR_COLOR.cascadia}
+                className="mx-auto"
+              />
+              <span className="mt-1 block text-[12px] font-black">{id.board.damage[stage]}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
+                {stage === 0 ? REFERENCE_LABELS.tiles.damageNormal : id.board.damageHint[stage]}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[11px] font-bold leading-snug text-zinc-500">
+          {REFERENCE_LABELS.tiles.crackNote}
+        </p>
       </Section>
 
       {/* 5 fase */}
@@ -219,6 +376,27 @@ export default function HowToPlayPage() {
       </Section>
 
 
+      {/* Everything in the box — playtesters asked for one list of the lot. */}
+      <Section
+        title={REFERENCE_LABELS.componentsHeading}
+        icon={<Boxes className="h-4 w-4" />}
+      >
+        <div className="space-y-4">
+          {COMPONENTS.map((group) => (
+            <ComponentGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
+          ))}
+        </div>
+      </Section>
+
+      {/* Glossary — the disaster words and the table words, in plain English. */}
+      <Section title={REFERENCE_LABELS.termsHeading} icon={<Library className="h-4 w-4" />}>
+        <div className="space-y-4">
+          {TERMS.map((group) => (
+            <TermGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
+          ))}
+        </div>
+      </Section>
+
       {/* Catatan demo */}
       <Section title={s.demo.title}>
         <p className="text-sm leading-relaxed text-zinc-700">{s.demo.body}</p>
@@ -258,6 +436,39 @@ function Section({
       </h2>
       {children}
     </section>
+  );
+}
+
+/**
+ * One printed tile painting, tinted with its sector colour the same way the
+ * board renderer washes it. Decorative: the tile's name sits beside it.
+ */
+function TileArtwork({
+  src,
+  swatch,
+  className,
+}: {
+  src: string;
+  swatch: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl",
+        className
+      )}
+      style={{ backgroundColor: `${swatch}22` }}
+    >
+      <Image
+        src={src}
+        alt=""
+        width={56}
+        height={56}
+        className="h-full w-full object-contain"
+        draggable={false}
+      />
+    </span>
   );
 }
 
