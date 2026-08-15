@@ -58,10 +58,10 @@ export const rewardCards: RewardCard[] = [
   },
   {
     id: "rew_sekolah_siaga",
-    title: "Sekolah Siaga Bencana",
+    title: "Disaster-Ready School",
     cost: 4,
     description:
-      "Anak-anak berlatih rutin sampai jalur evakuasi jadi refleks, bukan pengumuman. Biaya Menenangkan turun 1 AP.",
+      "Children drill the route until evacuation is reflex rather than an announcement. Calm costs 1 AP less.",
     effectKey: "calm_cheap",
   },
   {

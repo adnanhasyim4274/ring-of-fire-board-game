@@ -204,7 +204,7 @@ function damageTile(s: GameState, index: number) {
     const step = nearestSafeStep(s, index);
     if (step !== null) {
       p.position = step;
-      log(s, `${p.name} melompat ke ubin ${step} tepat pada waktunya!`);
+      log(s, `${p.name} leaps to tile ${step} just in time!`);
     }
   }
 }
@@ -630,7 +630,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       s.discards.disaster.push(id);
       // Rute Laut tertutup total saat bencana Oseanografi.
       s.seaLaneOpen = card.category !== "oceanic";
-      log(s, `Bencana: "${card.title}" — ${card.roundEffect}`);
+      log(s, `Disaster: "${card.title}" — ${card.roundEffect}`);
       if (!s.seaLaneOpen) log(s, "The Sea Lane is CLOSED this round.");
 
       if (card.roundEffectKey === "panic_spread") {
@@ -704,7 +704,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       }
       player.ap -= cost;
       player.position = to;
-      log(s, `${player.name} bergerak ke ubin ${to} (${cost} AP).`);
+      log(s, `${player.name} moves to tile ${to} (${cost} AP).`);
       return s;
     }
 
@@ -806,7 +806,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         log(
           s,
           `${player.name} brings ${group.length} to a Ready Post — SAFE! ` +
-            `(${s.evacuees.length} terselamatkan)`
+            `(${s.evacuees.length} now safe)`
         );
         applyGameOverCheck(s);
       } else {
@@ -868,7 +868,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (card.bonus === "refund_ap") {
         if (s.phase === "p3_turns") player.ap += 1;
         else s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
-        log(s, `${player.name} mendapat 1 AP kembali (bonus kartu 2 poin).`);
+        log(s, `${player.name} gets 1 AP back (2-point card bonus).`);
       }
       if (card.bonus === "calm_nearest") {
         const v = nearestPanickedVillager(s, player.position);
@@ -910,7 +910,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         case "ap2": {
           if (s.phase === "p3_turns") player.ap += 2;
           else s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 2;
-          log(s, `${player.name} melakukan Sprint Darurat — +2 AP!`);
+          log(s, `${player.name} makes an Emergency Sprint — +2 AP!`);
           break;
         }
         case "alt_route": {
@@ -925,7 +925,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               const received = other.hand.shift();
               other.hand.push(action.tradeGiveCardId);
               if (received) player.hand.push(received);
-              log(s, `${player.name} bertukar kartu dengan ${other.name} (Bantuan Logistik).`);
+              log(s, `${player.name} swaps a card with ${other.name} (Logistic Assist).`);
             }
           } else {
             log(s, `${player.name} membagikan info logistik ke tim.`);
@@ -990,7 +990,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       other.hand.push(action.giveCardId);
       if (hasAbility(player, "network_sync")) player.escortBonusAp += 1;
       refreshCollector(s);
-      log(s, `${player.name} barter kartu dengan ${other.name}.`);
+      log(s, `${player.name} barters a card with ${other.name}.`);
       return s;
     }
 
@@ -1014,7 +1014,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
             return s;
           }
           s.peek = { kind: which, cardId: deck[0] };
-          log(s, `${player.name} (Elang) melakukan Reconnaissance ke dek ${which}.`);
+          log(s, `${player.name} (Bald Eagle) runs Reconnaissance on the ${which} deck.`);
           break;
         }
         case "data_mining": {
@@ -1057,7 +1057,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               refreshCollector(s);
             }
           }
-          log(s, `${player.name} (Monyet) Sinkronisasi Jaringan dengan ${other.name}.`);
+          log(s, `${player.name} (Japanese Macaque) runs Network Sync with ${other.name}.`);
           break;
         }
         case "suppress": {
@@ -1099,7 +1099,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       while (player.hand.length > limit) {
         const dropped = player.hand.pop()!;
         s.discards.evidence.push(dropped);
-        log(s, `${player.name} melebihi batas tangan (${limit}) — 1 kartu dibuang.`);
+        log(s, `${player.name} is over the hand limit (${limit}), so 1 card is discarded.`);
       }
       refreshCollector(s);
 
@@ -1128,7 +1128,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         }
       }
       const nextUp = currentPlayer(s);
-      if (nextUp) log(s, `Giliran ${nextUp.name}.`);
+      if (nextUp) log(s, `${nextUp.name} is up.`);
       return s;
     }
 
@@ -1138,7 +1138,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (s.verdict !== null) return state; // immutable once committed
       if (!s.activeNews) return state;
       s.verdict = action.verdict;
-      log(s, `Vonis tim: ${action.verdict.toUpperCase()}. Tidak bisa diubah lagi.`);
+      log(s, `Team verdict: ${action.verdict.toUpperCase()}. Locked in.`);
       return s;
     }
 
@@ -1232,12 +1232,12 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
     }
     case "DEBUG_SET_NEWS_TOP": {
       s.decks.news = [action.cardId, ...s.decks.news.filter((id) => id !== action.cardId)];
-      log(s, `[debug] Dek Berita paling atas = ${action.cardId}.`);
+      log(s, `[debug] Top of the News deck = ${action.cardId}.`);
       return s;
     }
     case "DEBUG_SET_DISASTER_TOP": {
       s.decks.disaster = [action.cardId, ...s.decks.disaster.filter((id) => id !== action.cardId)];
-      log(s, `[debug] Dek Bencana paling atas = ${action.cardId}.`);
+      log(s, `[debug] Top of the Disaster deck = ${action.cardId}.`);
       return s;
     }
     case "DEBUG_TRIM_DISASTER_DECK": {
