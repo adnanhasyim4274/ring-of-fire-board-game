@@ -274,7 +274,7 @@ function RingTileImpl({
 
       {/* CARD → TILE, part 1: a light/dark diagonal hatch laid across the whole
           hexagon. Texture, not colour, so the "the card is talking about THIS
-          patch of the board" reading survives greyscale — and it is a fill,
+          patch of the board" reading survives greyscale, and it is a fill,
           which neither of the other two cues ever uses. Drawn under the tokens
           so villagers and Guardians stay readable on top of it. */}
       {isCardTarget && !hancur && (
@@ -340,7 +340,7 @@ function RingTileImpl({
       )}
 
       {/* WHERE CAN I GO, part 1: the footprint. It used to be a 16px lucide
-          glyph buried in the side panel — playtesters never spotted it. Now it
+          glyph buried in the side panel, which playtesters never spotted. Now it
           is a ~60 unit badge sitting on the destination tile itself, white on a
           dark disc so it holds up over any sector artwork, and it breathes so
           it reads as an invitation rather than as printed decoration.
@@ -526,7 +526,7 @@ function RingTileImpl({
       {/* Sorotan status. Four rings, four dash patterns, so they stay separable
           in greyscale:
             card target  · · · · beads (round caps on a hairline dash)
-            move target  ——————— solid
+            move target   ~~~~~~~~~   solid
             Sea crossing – – – –  long dash
             you are here ═══════ two concentric solid rings
           Every ring is drawn over a darker, wider copy of itself so it keeps
@@ -590,7 +590,7 @@ function RingTileImpl({
 
       {/* WHERE AM I, part 1: the double ring. Drawn after everything else so a
           selected or targeted tile still shows it, and offset outward as well
-          as traced on the hex itself — two concentric outlines are a shape no
+          as traced on the hex itself, two concentric outlines being a shape no
           other cue on this board uses. */}
       {youAreHere && (
         <g aria-hidden>

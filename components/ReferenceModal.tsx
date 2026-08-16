@@ -1,7 +1,9 @@
 "use client";
 import { useState } from "react";
 import { Search, X } from "lucide-react";
+import { ART } from "@/data/artManifest";
 import { Modal } from "@/components/ui/Modal";
+import { PrintedImageOr } from "@/components/cards/PrintedCard";
 import { en as id } from "@/lib/i18n/en";
 import {
   COMPONENTS,
@@ -55,6 +57,46 @@ function filterTerms(query: string): TermGroup[] {
 const GROUP_HEADING = "text-sm font-black uppercase tracking-wide";
 
 /**
+ * The printed piece for each component in the list, so "Verdict tokens" is
+ * answered by the token the player is looking for in the box rather than by a
+ * paragraph about it. Keyed by `ReferenceComponent.id` from `lib/reference.ts`.
+ *
+ * Only pieces whose artwork is unambiguous are here. Missing on purpose:
+ *   - News cards. Thirteen of the fourteen printed fronts belong to no card in
+ *     data/, and the one that does maps (`news_vis_02`) prints a pre-v3 target
+ *     sector, so using it as the picture of "a News card" would teach a rule
+ *     that is no longer true. See lib/newsArt.ts.
+ *   - Evidence, Chaos and Reward cards, Guardian pawns, Villager tokens and the
+ *     Crisis Token. The illustrator has not drawn these yet.
+ * Every entry is decorative: the name, the count and both paragraphs are the
+ * content, and they render unchanged when there is no art or it fails to load.
+ */
+const COMPONENT_ART: Record<string, { srcs: string[]; thumbClass: string }> = {
+  hex_tiles: { srcs: [ART.boardMap], thumbClass: "h-14 w-auto rounded-md" },
+  terrain_tiles: {
+    srcs: [ART.tile.island.normal, ART.tile.snow.normal, ART.tile.volcano.normal],
+    thumbClass: "h-7 w-auto",
+  },
+  sea_lane_tiles: { srcs: [ART.tile.sea.normal], thumbClass: "h-10 w-auto" },
+  damage_markers: { srcs: [ART.tile.volcano.destroyed], thumbClass: "h-10 w-auto" },
+  role_cards: {
+    srcs: [ART.roleCard.sumatran_tiger, ART.roleCard.back],
+    thumbClass: "h-11 w-auto rounded-[3px] shadow-sm",
+  },
+  disaster_cards: {
+    srcs: [ART.disasterCard.dis_vol_01, ART.disasterCard.back],
+    thumbClass: "h-11 w-auto rounded-[3px] shadow-sm",
+  },
+  ap_tokens: { srcs: [ART.token.action_point], thumbClass: "h-9 w-auto" },
+  verdict_tokens: {
+    srcs: [ART.token.verdict_fact, ART.token.verdict_hoax, ART.token.verdict_abstain],
+    thumbClass: "h-7 w-auto",
+  },
+  panic_meter: { srcs: [ART.panicMeter], thumbClass: "h-16 w-auto" },
+  reputation_track: { srcs: [ART.token.reputation_point], thumbClass: "h-9 w-auto" },
+};
+
+/**
  * The group title sits under the modal's own h2 in one place and under the How
  * to Play page's section h2 in the other, so the caller says which level keeps
  * the outline unbroken.
@@ -91,20 +133,38 @@ export function ComponentGroupBlock({
         {group.title}
       </GroupTitle>
       <ul className="mt-1.5 space-y-2">
-        {group.items.map((c) => (
-          <li key={c.id} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-              <span className="text-sm font-black">{c.name}</span>
-              <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-bold text-zinc-600">
-                {c.count}
-              </span>
-            </p>
-            <p className="mt-1 text-[12px] leading-snug text-zinc-700">{c.what}</p>
-            <p className="mt-1 text-[12px] leading-snug text-zinc-600">
-              <b className="text-zinc-500">{REFERENCE_LABELS.useLabel}</b> · {c.use}
-            </p>
-          </li>
-        ))}
+        {group.items.map((c) => {
+          const art = COMPONENT_ART[c.id];
+          return (
+            <li
+              key={c.id}
+              className="flex gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
+            >
+              {art && (
+                /* A narrow fixed column, so the text keeps a readable measure
+                   next to it at 375px and the pieces stay recognisable rather
+                   than filling the row. */
+                <div className="flex w-16 shrink-0 flex-wrap items-center justify-center gap-1 self-start">
+                  {art.srcs.map((src) => (
+                    <PrintedImageOr key={src} src={src} className={art.thumbClass} />
+                  ))}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="text-sm font-black">{c.name}</span>
+                  <span className="rounded-md bg-zinc-100 px-1.5 py-0.5 text-[11px] font-bold text-zinc-600">
+                    {c.count}
+                  </span>
+                </p>
+                <p className="mt-1 text-[12px] leading-snug text-zinc-700">{c.what}</p>
+                <p className="mt-1 text-[12px] leading-snug text-zinc-600">
+                  <b className="text-zinc-500">{REFERENCE_LABELS.useLabel}</b> · {c.use}
+                </p>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

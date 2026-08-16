@@ -1,7 +1,12 @@
 "use client";
+import { useState } from "react";
 import { motion } from "framer-motion";
+import { Maximize2 } from "lucide-react";
 import type { Player, Role } from "@/engine/types";
+import { ART } from "@/data/artManifest";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { PrintedImage, usePrintedArt } from "@/components/cards/PrintedCard";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
@@ -31,6 +36,23 @@ export function RolePanel({
   // One glyph per ability, so two Guardians never read the same at a glance.
   const iconSize = "h-3.5 w-3.5 shrink-0";
 
+  // The printed role card. It is a thumbnail that opens the full card, NOT the
+  // panel itself, for two reasons: a 2:3 card at the panel's full width is
+  // roughly 500px tall on a 375px phone, which would push the Active button and
+  // the Sub-Mission bar off the bottom of the screen; and in Phase 5 this panel
+  // is rendered once per player, so six full cards would be a scroll marathon.
+  // The thumbnail keeps the object the player is holding at the table in view,
+  // one tap gets it legible, and everything that changes during play (whether
+  // the Active is still available, how far the Sub-Mission has got) stays where
+  // it was, rendered from state.
+  const art = usePrintedArt(ART.roleCard[role.id]);
+  const [cardOpen, setCardOpen] = useState(false);
+
+  const activeStatus = player.activeUsedThisRound ? id.role.activeUsed : id.role.activeCost;
+  const subMissionStatus = player.subMissionDone
+    ? id.role.subMissionDone
+    : `${progress}/${target}`;
+
   return (
     <section
       className={cn(
@@ -39,7 +61,27 @@ export function RolePanel({
       )}
     >
       <header className="flex items-center gap-2">
-        <span className="text-2xl leading-none">{emojiForRole(role.id)}</span>
+        {art ? (
+          <button
+            type="button"
+            onClick={() => setCardOpen(true)}
+            aria-label={`${role.name} · ${role.title}`}
+            className="relative -m-1 shrink-0 rounded-lg p-1 transition-colors hover:bg-black/5"
+          >
+            <PrintedImage
+              art={art}
+              className="h-16 w-[43px] rounded-[4px] object-cover shadow-sm"
+            />
+            <span
+              className="absolute bottom-0 right-0 rounded-full bg-white/90 p-0.5 shadow"
+              aria-hidden
+            >
+              <Maximize2 className="h-3 w-3 text-zinc-600" />
+            </span>
+          </button>
+        ) : (
+          <span className="text-2xl leading-none">{emojiForRole(role.id)}</span>
+        )}
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline gap-1.5">
             <span className="truncate text-sm font-black">{player.name}</span>
@@ -120,6 +162,65 @@ export function RolePanel({
           {id.role.subMissionReward}
         </p>
       </div>
+
+      {/* The card at a size it can actually be read at. The print cannot know
+          whether the Active has been spent this round or how far the Sub-Mission
+          has got, so both are repeated underneath it from state: a player who
+          opens the card must not come away with a stale picture of their turn. */}
+      <Modal open={cardOpen} onClose={() => setCardOpen(false)}>
+        <div className="space-y-3">
+          {art && (
+            <PrintedImage
+              art={art}
+              alt={`${role.name}, ${role.title}`}
+              className="mx-auto block max-h-[58dvh] w-auto rounded-xl shadow-lg"
+            />
+          )}
+          <p className="text-center text-sm font-black">
+            {role.name} · {role.title}
+          </p>
+
+          <dl className="space-y-1.5 text-[12px] leading-snug">
+            <div className="rounded-xl bg-zinc-50 p-2">
+              <dt className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-zinc-500">
+                <AbilityIcon icon={iconForPassive(role.id)} className={iconSize} />
+                {id.role.passive} · {role.passiveName}
+              </dt>
+              <dd className="mt-0.5 text-zinc-700">{role.passive}</dd>
+            </div>
+
+            <div className="rounded-xl border-2 border-violet-200 bg-violet-50 p-2">
+              <dt className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-violet-700">
+                <AbilityIcon icon={iconForActive(role.activeKey)} className={iconSize} />
+                {id.role.active} · {role.activeName}
+              </dt>
+              <dd className="mt-0.5 text-violet-900">
+                {role.active}
+                <span className="mt-1 block text-[11px] font-black text-violet-700">
+                  {activeStatus}
+                </span>
+              </dd>
+            </div>
+
+            <div className="rounded-xl border-2 border-amber-200 bg-amber-50 p-2">
+              <dt className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wide text-amber-800">
+                <AbilityIcon icon={iconForSubMission(role.subMissionKey)} className={iconSize} />
+                {id.role.subMission} · {role.subMissionName}
+              </dt>
+              <dd className="mt-0.5 text-amber-950">
+                {role.subMission}
+                <span className="mt-1 block text-[11px] font-black tabular-nums text-amber-800">
+                  {id.role.progress}: {subMissionStatus}
+                </span>
+              </dd>
+            </div>
+          </dl>
+
+          <Button variant="ghost" className="w-full" onClick={() => setCardOpen(false)}>
+            {id.common.close}
+          </Button>
+        </div>
+      </Modal>
     </section>
   );
 }

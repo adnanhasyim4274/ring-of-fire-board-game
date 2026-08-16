@@ -64,7 +64,7 @@ export const disasterCards: DisasterCard[] = [
       "Shaking brings a cliff face down across the only road linking two valleys, taking the relay mast with it.",
     locationLabel: "Highland passes",
     roundEffect:
-      "Evidence cards cannot be discarded for movement effects this round — the alternate routes are buried.",
+      "Evidence cards cannot be discarded for movement effects this round: the alternate routes are buried.",
     roundEffectKey: "no_evidence_move",
     affectedSectorIds: ["andes"],
     endEffect: "The affected sector's most crowded tile takes damage.",
@@ -137,7 +137,7 @@ export const disasterCards: DisasterCard[] = [
       "The water is pulling back off the shelf far past any low tide. The trough of the wave arrives first; the crest is behind it.",
     locationLabel: "Coastlines",
     roundEffect:
-      "Leaving a coastal sector costs 1 extra AP. The Sea Lane is closed — nobody crosses open water today.",
+      "Leaving a coastal sector costs 1 extra AP. The Sea Lane is closed: nobody crosses open water today.",
     roundEffectKey: "coast_exit_penalty",
     affectedSectorIds: ["hokkaido", "south_pacific"],
     endEffect: "The affected sector's most crowded tile is swept and takes damage.",
@@ -151,7 +151,7 @@ export const disasterCards: DisasterCard[] = [
       "A rupture on the far side of the ocean sent a wave train across it overnight. It has been travelling at the speed of a jet and it arrives on a schedule nobody can negotiate with.",
     locationLabel: "All coastlines",
     roundEffect:
-      "Guardians cannot barter Evidence this round — the networks are saturated with warnings. The Sea Lane is closed.",
+      "Guardians cannot barter Evidence this round: the networks are saturated with warnings. The Sea Lane is closed.",
     roundEffectKey: "block_trade",
     affectedSectorIds: [],
     endEffect: "The most crowded tile on the ring takes damage.",
@@ -208,7 +208,7 @@ export const disasterCards: DisasterCard[] = [
       "Masts are down and the cables are cut. No internet, no broadcast, no way to check anything against a source that is not standing next to you.",
     locationLabel: "All sectors",
     roundEffect:
-      "WHERE-category Evidence cannot be played this round — there is no network to search on.",
+      "WHERE-category Evidence cannot be played this round: there is no network to search on.",
     roundEffectKey: "block_where",
     affectedSectorIds: [],
     endEffect: "No tile is damaged, but the region is cut off from official news.",
@@ -221,7 +221,7 @@ export const disasterCards: DisasterCard[] = [
     description:
       "Everyone acted on the same rumour at the same moment and took their own vehicle. The main road is now a very long car park.",
     locationLabel: "All sectors",
-    roundEffect: "Guardians cannot barter Evidence this round — nobody can reach anybody.",
+    roundEffect: "Guardians cannot barter Evidence this round: nobody can reach anybody.",
     roundEffectKey: "block_trade",
     affectedSectorIds: [],
     endEffect: "No tile is damaged, but the delay compounds.",

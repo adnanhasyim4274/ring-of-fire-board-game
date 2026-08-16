@@ -35,7 +35,7 @@ export const evidenceCards: EvidenceCard[] = [
     title: "Shadow Analysis",
     points: 2,
     description:
-      "The building throws its shadow to the left and the crowd throws theirs to the right. One sun, two directions — someone pasted these together.",
+      "The building throws its shadow to the left and the crowd throws theirs to the right. One sun, two directions: someone pasted these together.",
     milEffect: "Opens 1 [WHAT] lock. Bonus: refunds 1 AP to whoever played it.",
     resourceName: "Alternate Route",
     resourceEffect: "Discard to cross one damaged tile without paying the terrain penalty.",
@@ -60,7 +60,7 @@ export const evidenceCards: EvidenceCard[] = [
     title: "Frame-by-Frame",
     points: 2,
     description:
-      "Step through it one frame at a time. The wave jumps position between two frames — this clip was cut together from separate footage.",
+      "Step through it one frame at a time. The wave jumps position between two frames: this clip was cut together from separate footage.",
     milEffect: "Opens 1 [WHAT] lock. Bonus: refunds 1 AP to whoever played it.",
     resourceName: "Logistics Assist",
     resourceEffect: "Discard to swap a card with another Guardian at no AP cost.",
@@ -252,7 +252,7 @@ export const evidenceCards: EvidenceCard[] = [
     title: "Phishing Link Warning",
     points: 1,
     description:
-      "The message pushes you to click a strange link to claim emergency food aid. There is no aid at the other end — only a form that wants your ID number.",
+      "The message pushes you to click a strange link to claim emergency food aid. There is no aid at the other end: only a form that wants your ID number.",
     milEffect: "Opens 1 [WHY] lock on the active News Card.",
     resourceName: "Logistics Assist",
     resourceEffect: "Discard to swap a card with another Guardian at no AP cost.",

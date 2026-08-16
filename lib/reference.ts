@@ -178,7 +178,7 @@ export const COMPONENTS: ComponentGroup[] = [
         name: "Evidence cards",
         count: `${evidenceDeckCount} cards (${evidenceUniqueCount} different ones, ${gameConfig.evidenceCopies} copies of each)`,
         what: `Verification techniques in ${evidenceCategoryCount} categories, worth 1 to 3 points. Exactly ${evidenceWildcardCount} is a wildcard.`,
-        use: "Your hand. Each card can open a 5W1H lock on the news, or be discarded for a tactical boost — one or the other, never both.",
+        use: "Your hand. Each card can open a 5W1H lock on the news, or be discarded for a tactical boost: one or the other, never both.",
       },
       {
         id: "disaster_cards",
@@ -233,7 +233,7 @@ export const COMPONENTS: ComponentGroup[] = [
         name: "Panic Meter",
         count: `1 track, ${gameConfig.panicMeterMax} spaces`,
         what: "A track with a marker that only ever climbs unless a card pushes it back.",
-        use: `Public trust. Fill all ${gameConfig.panicMeterMax} spaces and nobody believes the Guardians any more — the team loses on the spot.`,
+        use: `Public trust. Fill all ${gameConfig.panicMeterMax} spaces and nobody believes the Guardians any more: the team loses on the spot.`,
       },
       {
         id: "reputation_track",
@@ -296,7 +296,7 @@ export const TERMS: TermGroup[] = [
         id: "ashfall",
         term: "Ashfall",
         definition:
-          "Volcanic ash raining out of an eruption cloud. It is not soft like fireplace ash — it is fine, sharp ground-up rock that hurts to breathe, blots out visibility, wrecks engines, and can collapse a roof under its own weight, especially once rain makes it heavier.",
+          "Volcanic ash raining out of an eruption cloud. It is not soft like fireplace ash: it is fine, sharp ground-up rock that hurts to breathe, blots out visibility, wrecks engines, and can collapse a roof under its own weight, especially once rain makes it heavier.",
       },
       {
         id: "eruption_column",
@@ -320,7 +320,7 @@ export const TERMS: TermGroup[] = [
         id: "sea_withdrawal",
         term: "Sea withdrawal",
         definition:
-          "The sea draining away from the shore far past any normal low tide. It is one of nature's own tsunami warnings — the dip between waves arriving before the crest — and the correct response is to leave the shoreline immediately rather than walk out and film it.",
+          "The sea draining away from the shore far past any normal low tide. It is one of nature's own tsunami warnings, the dip between waves arriving before the crest, and the correct response is to leave the shoreline immediately rather than walk out and film it.",
       },
       {
         id: "storm_surge",
@@ -332,7 +332,7 @@ export const TERMS: TermGroup[] = [
         id: "submarine_eruption",
         term: "Submarine eruption",
         definition:
-          "A volcano erupting beneath the sea. It can boil the water above it into steam and ash and, over time, genuinely build new islands — which is exactly why fake footage of \"a new island rising\" is so easy to believe.",
+          "A volcano erupting beneath the sea. It can boil the water above it into steam and ash and, over time, genuinely build new islands, which is exactly why fake footage of \"a new island rising\" is so easy to believe.",
       },
       {
         id: "early_warning",
@@ -372,18 +372,18 @@ export const TERMS: TermGroup[] = [
       {
         id: "sea_lane",
         term: "Sea Lane",
-        definition: `The ${seaLaneTileCount} water hexes crossing the middle of the ring, joining two opposite Ready Posts. It costs ${gameConfig.seaLaneCost} AP a tile and carries ${gameConfig.seaLaneMaxVillagers} villager at a time, and any Oceanic disaster closes it completely — which can strand you on the far side.`,
+        definition: `The ${seaLaneTileCount} water hexes crossing the middle of the ring, joining two opposite Ready Posts. It costs ${gameConfig.seaLaneCost} AP a tile and carries ${gameConfig.seaLaneMaxVillagers} villager at a time, and any Oceanic disaster closes it completely, which can strand you on the far side.`,
       },
       {
         id: "crisis_token",
         term: "Crisis Token",
         definition:
-          "The marker a News card drops on a region. While it sits there, nobody can be escorted off that tile — calming people one by one does not shift it. Only a correct verdict removes it (or the Andean Llama's ability).",
+          "The marker a News card drops on a region. While it sits there, nobody can be escorted off that tile: calming people one by one does not shift it. Only a correct verdict removes it (or the Andean Llama's ability).",
       },
       {
         id: "villager_states",
         term: "Calm and Panicked",
-        definition: `The two faces of a villager token. Panicked villagers cannot be escorted, and turning one back to Calm costs ${gameConfig.calmCost} AP — which is why letting a rumour run is more expensive than checking it.`,
+        definition: `The two faces of a villager token. Panicked villagers cannot be escorted, and turning one back to Calm costs ${gameConfig.calmCost} AP, which is why letting a rumour run is more expensive than checking it.`,
       },
       {
         id: "lock",
@@ -395,7 +395,7 @@ export const TERMS: TermGroup[] = [
         id: "dual_use",
         term: "Evidence card dual use",
         definition:
-          "Each Evidence card has two halves and you only ever get one of them: the top half opens a lock, the bottom half is discarded for a tactical boost like extra AP or a free calm. Proving the truth or moving faster — never both from the same card.",
+          "Each Evidence card has two halves and you only ever get one of them: the top half opens a lock, the bottom half is discarded for a tactical boost like extra AP or a free calm. Proving the truth or moving faster, never both from the same card.",
       },
       {
         id: "wildcard",
@@ -449,12 +449,12 @@ export const TERMS: TermGroup[] = [
         id: "rumour_spreads",
         term: "RUMOUR SPREADS",
         definition:
-          "Your verdict was wrong, or the table abstained. The Panic Meter goes up by one, you draw a Chaos card, and the card's \"if ignored\" effect lands on the board.",
+          "Your verdict was wrong, or the table abstained. The Panic Meter goes up by one for the outcome, then again from the card's own \"if ignored\" effect, so expect two. You also draw a Chaos card.",
       },
       {
         id: "panic_meter",
         term: "Panic Meter",
-        definition: `The track that measures how much the public still trusts you. Every failed verdict pushes it up, and if it reaches ${gameConfig.panicMeterMax} the team loses immediately — a Literacy Failure, not a body count.`,
+        definition: `The track that measures how much the public still trusts you. Every failed verdict pushes it up, and if it reaches ${gameConfig.panicMeterMax} the team loses immediately: a Literacy Failure, not a body count.`,
       },
       {
         id: "reputation",
@@ -464,7 +464,7 @@ export const TERMS: TermGroup[] = [
       {
         id: "sub_mission",
         term: "Sub-Mission",
-        definition: `A personal goal printed on your role card — one per Guardian, ${subMissionCount} in all. Finishing it is worth +${gameConfig.reputationPerSubMission} Reputation to the whole team, so it is a shared prize, not a private score.`,
+        definition: `A personal goal printed on your role card: one per Guardian, ${subMissionCount} in all. Finishing it is worth +${gameConfig.reputationPerSubMission} Reputation to the whole team, so it is a shared prize, not a private score.`,
       },
       {
         id: "chaos_card",

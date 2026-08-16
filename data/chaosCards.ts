@@ -19,7 +19,7 @@ export const chaosCards: ChaosCard[] = [
     id: "chaos_02",
     title: "Source Blocked: Maps Restricted",
     description:
-      "Mapping and imagery services go dark \"for public order\". [WHERE] Evidence cannot be played for 2 rounds.",
+      "Mapping and imagery services go dark \"for public order\". [WHERE] Evidence cannot be played until this card is cleared.",
     effectKey: "block_category",
     blockedCategory: "WHERE",
   },
@@ -27,7 +27,7 @@ export const chaosCards: ChaosCard[] = [
     id: "chaos_03",
     title: "Source Blocked: Archive Wiped",
     description:
-      "Old news archives vanish from the servers and upload histories are scrubbed. [WHEN] Evidence cannot be played for 2 rounds.",
+      "Old news archives vanish from the servers and upload histories are scrubbed. [WHEN] Evidence cannot be played until this card is cleared.",
     effectKey: "block_category",
     blockedCategory: "WHEN",
   },
@@ -35,7 +35,7 @@ export const chaosCards: ChaosCard[] = [
     id: "chaos_04",
     title: "Source Blocked: Authority Drowned Out",
     description:
-      "Official channels are buried under copycat accounts until nobody can tell which one is real. [HOW] Evidence cannot be played for 2 rounds.",
+      "Official channels are buried under copycat accounts until nobody can tell which one is real. [HOW] Evidence cannot be played until this card is cleared.",
     effectKey: "block_category",
     blockedCategory: "HOW",
   },
@@ -43,7 +43,7 @@ export const chaosCards: ChaosCard[] = [
     id: "chaos_05",
     title: "Panic Exodus",
     description:
-      "The rumour outruns the evacuation plan. At the start of each round, 2 villagers wander to a random neighbouring tile — often the wrong way.",
+      "The rumour outruns the evacuation plan. At the end of each round, 2 villagers wander to a random neighbouring tile: often the wrong way.",
     effectKey: "villager_drift",
   },
   {
@@ -64,7 +64,7 @@ export const chaosCards: ChaosCard[] = [
     id: "chaos_08",
     title: "Credibility Eroded",
     description:
-      "Call one true report a hoax and the team's own standing takes the hit. Every Reputation point earned from now on is docked by one before it lands.",
+      "Call one true report a hoax and the team's own standing takes the hit. The team loses 1 Reputation the moment this lands.",
     effectKey: "reputation_tax",
   },
 ];

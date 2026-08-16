@@ -64,7 +64,7 @@ export function PeekModal({
             </span>
             <h3 className="text-lg font-black leading-snug">{id.peek.title}</h3>
             <p className="text-sm font-bold text-zinc-600">
-              Only you should see this — angle the screen away from the table
+              Only you should see this: angle the screen away from the table
               before you tap.
             </p>
           </div>

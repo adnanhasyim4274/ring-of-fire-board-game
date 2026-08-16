@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON, NEWS_CATEGORY_CLASS } from "@/lib/theme";
 import { NEWS_ART } from "@/lib/newsArt";
+import { PrintedImage, usePrintedArt } from "@/components/cards/PrintedCard";
 
 /**
  * Kartu Berita dengan animasi balik 3D sungguhan.
@@ -88,7 +89,11 @@ function NewsFront({
   // live game state (which locks are open, the real target sector), so it is
   // still rendered from data — the print shows the locks closed and, on the one
   // artwork that maps, a pre-v3 sector label. See lib/newsArt.ts.
-  const art = NEWS_ART[card.id];
+  //
+  // `usePrintedArt` returns null both for the thirteen cards with no printed
+  // front and for a file that fails to load, so the social-post layout below is
+  // a complete card in either case rather than a hole where the headline was.
+  const art = usePrintedArt(NEWS_ART[card.id]);
 
   return (
     <article className="overflow-hidden rounded-2xl border-2 border-zinc-300 bg-white shadow-lg">
@@ -109,8 +114,7 @@ function NewsFront({
 
       {art ? (
         <div className="border-b border-zinc-200 bg-zinc-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={art} alt="" className="block h-auto w-full" draggable={false} />
+          <PrintedImage art={art} className="block h-auto w-full" />
           <span className="sr-only">
             {card.title}. {card.body} {id.news.attached}: {card.attachedContent}
           </span>
@@ -186,7 +190,7 @@ function LockBadge({ lock, open }: { lock: EvidenceCategory; open: boolean }) {
       layout
       animate={open ? { scale: [1, 1.16, 1] } : { scale: 1 }}
       transition={{ duration: 0.45 }}
-      aria-label={`${lock} — ${open ? id.news.lockOpen : id.news.lockClosed}`}
+      aria-label={`${lock}: ${open ? id.news.lockOpen : id.news.lockClosed}`}
       className={cn(
         "inline-flex min-h-11 flex-1 items-center gap-2 rounded-xl border-2 px-2.5 py-1.5 text-left",
         open

@@ -254,7 +254,7 @@ export default function PlayPage() {
         <p className="flex items-start gap-1.5 rounded-xl border-2 border-amber-300 bg-amber-50 p-2 text-[11px] font-bold leading-snug text-amber-900">
           <Wind className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            <b>{state.activeDisaster.title}</b> — {state.activeDisaster.roundEffect}
+            <b>{state.activeDisaster.title}</b>: {state.activeDisaster.roundEffect}
           </span>
         </p>
       )}
@@ -286,7 +286,7 @@ export default function PlayPage() {
           {escortIds.length > 0 && (
             <p className="mt-2 rounded-xl bg-violet-100 p-2 text-center text-xs font-bold text-violet-900">
               <HandHelping className="mr-1 inline h-4 w-4" />
-              {escortIds.length} {id.actions.escortSelected} — {id.actions.escortHint}{" "}
+              {escortIds.length} {id.actions.escortSelected}: {id.actions.escortHint}{" "}
               <button type="button" className="underline" onClick={() => setEscortIds([])}>
                 {id.common.cancel}
               </button>

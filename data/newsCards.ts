@@ -35,7 +35,7 @@ export const newsCards: NewsCard[] = [
   {
     id: "news_soc_02",
     category: "social_superstition",
-    title: "Rotorua's Geysers Fell Silent — The Ancestors Are Warning Us",
+    title: "Rotorua's Geysers Fell Silent: The Ancestors Are Warning Us",
     body: "The big geyser has not erupted in four days. My aunt says this only happened once before, the year of the great flood. The ancestors are telling us to leave the coast and climb inland tonight. FORWARD THIS.",
     attachedContent:
       "A photo of a still, steaming geyser basin with a caption in a heavy dramatic font.",
@@ -43,7 +43,7 @@ export const newsCards: NewsCard[] = [
     truth: "hoax",
     locks: ["HOW", "WHEN"],
     explanation:
-      "Geyser intervals shift constantly with rainfall, groundwater and even nearby drilling — a quiet spell is ordinary and is not a forecasting tool. Worse, the instruction is backwards: this is a coastal region where the official advice in a real event is to move inland and uphill, which is not the same as an unplanned night-time scramble.",
+      "Geyser intervals shift constantly with rainfall, groundwater and even nearby drilling: a quiet spell is ordinary and is not a forecasting tool. Worse, the instruction is backwards: this is a coastal region where the official advice in a real event is to move inland and uphill, which is not the same as an unplanned night-time scramble.",
     redFlags:
       "A single relative as the only source, a pattern claimed from one past coincidence, and an urgent instruction issued at night.",
     ifIgnored: { panic: 1, panicTargetSector: true },
@@ -60,7 +60,7 @@ export const newsCards: NewsCard[] = [
     truth: "hoax",
     locks: ["HOW", "WHY"],
     explanation:
-      "Slope failure is driven by rainfall, seismic shaking and slope angle — leaving a hillside cannot trigger one. Messages that threaten collective punishment for evacuating are one of the most reliable ways misinformation turns deadly, because they convert a safety decision into a loyalty test.",
+      "Slope failure is driven by rainfall, seismic shaking and slope angle: leaving a hillside cannot trigger one. Messages that threaten collective punishment for evacuating are one of the most reliable ways misinformation turns deadly, because they convert a safety decision into a loyalty test.",
     redFlags:
       "Collective blame, a threat aimed at anyone who leaves, and a claim about a past event that nobody can check.",
     ifIgnored: { panic: 1, lockEvacuationSector: true },
@@ -79,7 +79,7 @@ export const newsCards: NewsCard[] = [
     explanation:
       "These markers are real. Tsunami stones along the Sanriku coast were placed by survivors of earlier disasters, and the settlements that respected the line above them fared measurably better in later events. It is inherited hazard mapping, written in stone because paper does not last a century.",
     redFlags:
-      "None — and that is the lesson. Dismissing this as 'just superstition' would throw away a genuine, verifiable hazard record. Check the source before you discard it.",
+      "None, and that is the lesson. Dismissing this as 'just superstition' would throw away a genuine, verifiable hazard record. Check the source before you discard it.",
     ifIgnored: { panic: 1, panicTargetSector: true },
     ifValidated: { removeCrisisToken: true, stepTowardReadyPost: true },
   },
@@ -130,7 +130,7 @@ export const newsCards: NewsCard[] = [
     truth: "hoax",
     locks: ["WHAT", "WHO"],
     explanation:
-      "Submarine eruptions can build new land — that part is real, which is what makes this convincing. But this particular footage is synthetic: the steam repeats on a short loop, and the account that posted it was created the same week and has no other content.",
+      "Submarine eruptions can build new land: that part is real, which is what makes this convincing. But this particular footage is synthetic: the steam repeats on a short loop, and the account that posted it was created the same week and has no other content.",
     redFlags:
       "A looping background, a brand-new account, and a real phenomenon used as cover for a fake recording.",
     ifIgnored: { panic: 1, panicTargetSector: true },
@@ -149,7 +149,7 @@ export const newsCards: NewsCard[] = [
     explanation:
       "The image is authentic. The lighting on the column matches the stated time of day, the ash shadow falls in the direction the sun would put it, and the observatory's own bulletin logged an ash emission in the same window.",
     redFlags:
-      "None — the trap here is the opposite one. Calling every dramatic image fake is its own failure, and dismissing this delays a response that is genuinely needed.",
+      "None: the trap here is the opposite one. Calling every dramatic image fake is its own failure, and dismissing this delays a response that is genuinely needed.",
     ifIgnored: { panic: 1, panicTargetSector: true },
     ifValidated: { removeCrisisToken: true, stepTowardReadyPost: true },
   },
@@ -159,7 +159,7 @@ export const newsCards: NewsCard[] = [
     id: "news_fra_01",
     category: "fraud_motive",
     title: "Emergency Donation for Valparaíso Families",
-    body: "Families on the coast have not eaten in three days and the authorities are doing nothing. Send whatever you can directly to the account below — every peso goes straight to them. Please do not scroll past.",
+    body: "Families on the coast have not eaten in three days and the authorities are doing nothing. Send whatever you can directly to the account below: every peso goes straight to them. Please do not scroll past.",
     attachedContent:
       "A photo of a crying child in front of a collapsed house, with a personal bank account number overlaid.",
     targetSectorId: "andes",
@@ -219,7 +219,7 @@ export const newsCards: NewsCard[] = [
     explanation:
       "This one checks out. The link resolves to a government domain, the agency's registration number is published and matches, and the appeal appears on the agency's own verified channel rather than only in forwarded messages.",
     redFlags:
-      "None — and treating every donation appeal as a scam is its own harm. The skill is telling a registered agency on its own domain apart from a stranger's account number.",
+      "None, and treating every donation appeal as a scam is its own harm. The skill is telling a registered agency on its own domain apart from a stranger's account number.",
     ifIgnored: { panic: 1 },
     ifValidated: { removeCrisisToken: true, apBonus: 1, drawEvidence: 1 },
   },
@@ -228,7 +228,7 @@ export const newsCards: NewsCard[] = [
   {
     id: "news_pse_01",
     category: "pseudoscience",
-    title: "Earthquake Clouds Over Seattle — Megathrust Tomorrow",
+    title: "Earthquake Clouds Over Seattle: Megathrust Tomorrow",
     body: "Look at the sky right now. Those long straight clouds are earthquake clouds. Every major quake has them 24 hours before. Tomorrow morning. I am not joking, get out of the city.",
     attachedContent:
       "A photo of a long thin cloud band at sunset, circled in red marker.",
@@ -253,7 +253,7 @@ export const newsCards: NewsCard[] = [
     truth: "hoax",
     locks: ["HOW", "WHO"],
     explanation:
-      "Aftershock sequences follow statistical patterns — they decay predictably in rate — but no agency on earth can put a clock time on one. The 'insider relative' is the oldest disguise in rumour circulation because it is unfalsifiable.",
+      "Aftershock sequences follow statistical patterns, they decay predictably in rate, but no agency on earth can put a clock time on one. The 'insider relative' is the oldest disguise in rumour circulation because it is unfalsifiable.",
     redFlags:
       "An exact time, an unnamed insider, and the 'forwarded many times' label that should lower your trust rather than raise it.",
     ifIgnored: { panic: 1, panicTargetSector: true },
@@ -263,7 +263,7 @@ export const newsCards: NewsCard[] = [
     id: "news_pse_03",
     category: "pseudoscience",
     title: "The Sea Pulled Back and the Fish Are Stranded",
-    body: "Strange scene at the beach — the water has gone out much further than any low tide and people are walking on the seabed picking up fish. Everyone is filming. Should we be worried?",
+    body: "Strange scene at the beach: the water has gone out much further than any low tide and people are walking on the seabed picking up fish. Everyone is filming. Should we be worried?",
     attachedContent:
       "A photo of an unusually exposed shoreline with a crowd walking out onto the wet sand, backs to the horizon.",
     targetSectorId: "hokkaido",
@@ -272,7 +272,7 @@ export const newsCards: NewsCard[] = [
     explanation:
       "This is real and it is the most urgent sign on this whole deck. A sudden, extreme withdrawal of the sea is a tsunami precursor: the trough of the wave arrives before the crest. The correct response is to leave the shoreline immediately and move to high ground.",
     redFlags:
-      "None in the report — the danger is in the crowd's reaction. Treating a genuine natural warning as a curiosity to film is how people die on beaches.",
+      "None in the report: the danger is in the crowd's reaction. Treating a genuine natural warning as a curiosity to film is how people die on beaches.",
     ifIgnored: { panic: 1, panicTargetSector: true },
     ifValidated: { removeCrisisToken: true, stepTowardReadyPost: true, apBonus: 1 },
   },
@@ -280,14 +280,14 @@ export const newsCards: NewsCard[] = [
     id: "news_pse_04",
     category: "pseudoscience",
     title: "Animals Are Coming Down Off Mayon",
-    body: "Farmers on the lower slope say wildlife has been moving downhill in numbers since yesterday — birds, then the larger animals. Old people say that means something. Is there anything to it?",
+    body: "Farmers on the lower slope say wildlife has been moving downhill in numbers since yesterday: birds, then the larger animals. Old people say that means something. Is there anything to it?",
     attachedContent:
       "A daylight photo of birds massed on a fence line with the volcano's shoulder behind them.",
     targetSectorId: "philippine",
     truth: "fact",
     locks: ["HOW", "WHERE"],
     explanation:
-      "The observation is genuine and worth acting on, though not for mystical reasons. Animals detect changes people miss — ground temperature, gas emission, small tremors — and the volcano observatory's instruments recorded matching signals on the same slope. Corroboration is what turns an anecdote into evidence.",
+      "The observation is genuine and worth acting on, though not for mystical reasons. Animals detect changes people miss, ground temperature, gas emission, small tremors, and the volcano observatory's instruments recorded matching signals on the same slope. Corroboration is what turns an anecdote into evidence.",
     redFlags:
       "None, provided you check it against instruments. An animal report alone proves nothing; an animal report that matches the monitoring data is a real signal.",
     ifIgnored: { panic: 1, panicTargetSector: true },

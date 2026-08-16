@@ -24,14 +24,14 @@ export type TileArtKey = SectorId | "ready_post" | "sea_lane";
  * Andes takes `desert` (the Atacama) rather than a third `volcano`.
  */
 export const TILE_ART: Record<TileArtKey, TileArtId> = {
-  sunda: "island", // Java, Sumatra, the Sunda Strait — tropical volcanic islands
-  philippine: "island", // Luzon, Mindanao, Taiwan — a tropical archipelago
-  hokkaido: "snow", // Japan, the Kurils, Kamchatka — snowbound northern coast
+  sunda: "island", // Java, Sumatra, the Sunda Strait: tropical volcanic islands
+  philippine: "island", // Luzon, Mindanao, Taiwan: a tropical archipelago
+  hokkaido: "snow", // Japan, the Kurils, Kamchatka: snowbound northern coast
   cascadia: "volcano", // Rainier and the Cascade volcanic arc up to the Aleutians
-  andes: "desert", // Peru, Chile and the Atacama — the driest desert on Earth
-  south_pacific: "island", // New Zealand, Tonga, Vanuatu — volcanic islands and atolls
+  andes: "desert", // Peru, Chile and the Atacama: the driest desert on Earth
+  south_pacific: "island", // New Zealand, Tonga, Vanuatu: volcanic islands and atolls
   ready_post: "island", // harbour towns on solid ground: Anyer, Rapa Nui, Unalaska
-  sea_lane: "sea", // open water — the only tiles that are not land at all
+  sea_lane: "sea", // open water: the only tiles that are not land at all
 };
 
 /** The painting key for a tile. Mirrors the colour/glyph chains in the theme. */

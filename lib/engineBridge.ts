@@ -9,22 +9,26 @@
 // menyorot ubin dan menampilkan label harga sebelum aksi dikirim ke reducer.
 // ============================================================================
 
-import type { GameState, Player } from "@/engine/types";
+import type { GameState, Player, TileState } from "@/engine/types";
 import {
+  BARTER_COST,
   allNeighbors,
   areRimAdjacent,
   areSeaLaneLinked,
   calmCost,
-  escortBlocked,
   escortCost,
+  escortRefusal,
+  escortRefusalFromTile,
   handLimit,
   isCategoryBlocked,
   isPassable,
   isSeaLaneOpen,
   maxEscortGroup,
   moveCost,
+  openWaterOptions,
   targetEvacuation,
 } from "@/engine/rules";
+import type { EscortRefusal, OpenWaterOption } from "@/engine/rules";
 
 /** Apakah perpindahan a -> b memakai Rute Laut, bukan langkah rim biasa. */
 export function isSeaRouteMove(state: GameState, from: number, to: number): boolean {
@@ -38,7 +42,12 @@ export interface MoveOption {
   cost: number;
   escortCost: number;
   affordable: boolean;
-  escortBlocked: boolean;
+  /**
+   * WHY an escort along this route would be refused, or null if it would go
+   * through. This used to be a bare boolean that nothing read, so all three
+   * reducer refusals reached the player as an action that simply did nothing.
+   */
+  escortRefusal: EscortRefusal | null;
 }
 
 /**
@@ -59,7 +68,7 @@ export function legalMoves(state: GameState, player: Player): MoveOption[] {
         cost,
         escortCost: escortCost(state, player.position, index, player, viaSeaLane),
         affordable: player.ap >= cost,
-        escortBlocked: from ? escortBlocked(state, from, state.tiles[index]) : true,
+        escortRefusal: from ? escortRefusal(state, from, state.tiles[index]) : null,
       };
     });
 }
@@ -69,13 +78,25 @@ export function escortGroupLimit(player: Player, viaSeaLane: boolean): number {
   return maxEscortGroup(player, viaSeaLane);
 }
 
+/**
+ * Kenapa warga di ubin ini tidak bisa dikawal ke mana pun, tanpa perlu tahu
+ * tujuannya. Dipakai TileInspector supaya alasannya muncul sebelum diketuk.
+ */
+export function escortRefusalHere(state: GameState, tile: TileState): EscortRefusal | null {
+  return escortRefusalFromTile(state, tile);
+}
+
 export {
+  BARTER_COST,
   calmCost,
   escortCost,
+  escortRefusal,
   handLimit,
   isCategoryBlocked,
   isPassable,
   isSeaLaneOpen,
   moveCost,
+  openWaterOptions,
   targetEvacuation,
 };
+export type { EscortRefusal, OpenWaterOption };

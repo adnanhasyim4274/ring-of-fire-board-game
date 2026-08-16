@@ -6,8 +6,15 @@ import { evidenceCardById } from "@/data/evidenceCards";
 import { roleById } from "@/data/roles";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
+import { BARTER_COST } from "@/lib/engineBridge";
 import { en as id } from "@/lib/i18n/en";
 import { EVIDENCE_CATEGORY_ICON } from "@/lib/theme";
+
+/** Belongs in lib/i18n/en.ts; that file is owned by another lane. */
+const TEXT = {
+  needAp: "Bartering costs 1 AP and you have none left this turn.",
+  blocked: "Total gridlock: no cards can be swapped this round.",
+} as const;
 
 /**
  * Barter Bukti (1 AP). Hanya dengan pemain di ubin yang sama —
@@ -34,6 +41,11 @@ export function BarterModal({
     (p) => p.id !== player.id && (anyDistance || p.position === player.position)
   );
   const partner = partners.find((p) => p.id === withPlayerId);
+  // Both of these make the reducer refuse the action outright, so the Swap
+  // button had no business being live for either of them.
+  const tooPoor = player.ap < BARTER_COST;
+  const tradeBlocked = state.activeDisaster?.roundEffectKey === "block_trade";
+  const blockedWhy = tradeBlocked ? TEXT.blocked : tooPoor ? TEXT.needAp : null;
 
   return (
     <Modal open onClose={onCancel}>
@@ -99,10 +111,16 @@ export function BarterModal({
           </>
         )}
 
+        {blockedWhy && (
+          <p className="rounded-xl bg-amber-50 p-2.5 text-xs font-bold text-amber-800">
+            {blockedWhy}
+          </p>
+        )}
+
         <div className="flex gap-2">
           <Button
             className="flex-1"
-            disabled={!withPlayerId || !takeCardId}
+            disabled={!withPlayerId || !takeCardId || tooPoor || tradeBlocked}
             onClick={() => onConfirm(withPlayerId, takeCardId)}
           >
             {id.evidence.barterConfirm}

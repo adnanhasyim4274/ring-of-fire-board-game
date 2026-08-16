@@ -187,7 +187,7 @@ export type ActiveAbilityKey =
 export type SubMissionKey =
   | "critical_mapping" // Bald Eagle: end turn on 3 different damaged tiles
   | "collect_3pt"      // Japanese Macaque: hold three 3-point evidence at once
-  | "rescue_crisis"    // Sumatran Tiger: evacuate 5 villagers from crisis tiles
+  | "rescue_crisis"    // Sumatran Tiger: evacuate 5 villagers out of the round's news sector
   | "catalyst"         // Kea Parrot: 3 barters whose card solved the news same round
   | "calm_six"         // Andean Llama: calm 6 panicked villagers total
   | "safe_passage";    // Whale Shark: deliver 3 villagers via the Sea Lane
@@ -360,7 +360,18 @@ export type GameAction =
   | { type: "PLAY_EVIDENCE_LOCK"; playerId: PlayerId; evidenceId: string; lock: EvidenceCategory }
   | { type: "DISCARD_FOR_RESOURCE"; playerId: PlayerId; evidenceId: string; tradeWithPlayerId?: PlayerId; tradeGiveCardId?: string; targetVillagerId?: string }
   | { type: "BARTER"; playerId: PlayerId; withPlayerId: PlayerId; giveCardId: string; takeCardId: string }
-  | { type: "USE_ACTIVE_ABILITY"; playerId: PlayerId; targetPlayerId?: PlayerId; deck?: "disaster" | "news"; evidenceIds?: string[]; lock?: EvidenceCategory }
+  // `villagerId` + `targetTileIndex` are the Whale Shark's "Deep Current"
+  // parameters; every other Active ability ignores them.
+  | {
+      type: "USE_ACTIVE_ABILITY";
+      playerId: PlayerId;
+      targetPlayerId?: PlayerId;
+      deck?: "disaster" | "news";
+      evidenceIds?: string[];
+      lock?: EvidenceCategory;
+      villagerId?: string;
+      targetTileIndex?: number;
+    }
   | { type: "END_PLAYER_TURN" }
   // Fase 4 — Commit & Flip
   | { type: "COMMIT_VERDICT"; verdict: Verdict }

@@ -62,8 +62,8 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
       </div>
 
       {/* `items-start`: only one of the three meters shows its warning line at
-          a time, and stretched cells handed the other two — the panic gauge
-          image especially — height they had nothing to put in. */}
+          a time, and stretched cells handed the other two: the panic gauge
+          image especially: height they had nothing to put in. */}
       <div className="grid items-start gap-x-3 gap-y-2 sm:grid-cols-3">
         <PanicMeter value={state.panicMeter} max={state.panicMeterMax} />
         <ReputationTrack
@@ -102,7 +102,7 @@ export function GameHud({ state, scenario }: { state: GameState; scenario: Scena
       </div>
 
       {/* The result of the last tap, in the engine's own words, directly under
-          the numbers it just moved — the one place on the page everybody is
+          the numbers it just moved: the one place on the page everybody is
           already looking. Renders nothing at all before the first entry. */}
       <ActionFeedback log={state.log} ap={current ? current.ap : undefined} />
     </header>

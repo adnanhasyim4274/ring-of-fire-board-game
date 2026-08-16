@@ -86,7 +86,7 @@ export function RingBoard({
           viewBox={`0 0 ${VIEWBOX} ${VIEWBOX}`}
           className="h-full w-full"
           role="group"
-          aria-label={`${id.board.title} — ${scenario.name}`}
+          aria-label={`${id.board.title}: ${scenario.name}`}
         >
           {/* Zona Krisis: Samudra Pasifik di tengah cincin */}
           <circle cx={CENTRE} cy={CENTRE} r={CENTRE_RADIUS + 26} fill="#071726" opacity={0.9} />

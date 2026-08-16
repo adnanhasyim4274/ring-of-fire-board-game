@@ -1,12 +1,33 @@
 "use client";
 import { Ship, Footprints, HandHelping, Lock, MapPin, Wind } from "lucide-react";
 import type { GameState, Player, Scenario, TileState, VillagerToken as Villager } from "@/engine/types";
-import type { MoveOption } from "@/lib/engineBridge";
+import type { EscortRefusal, MoveOption } from "@/lib/engineBridge";
+import { escortRefusalHere } from "@/lib/engineBridge";
 import { Button } from "@/components/ui/Button";
 import { VillagerToken } from "@/components/board/VillagerToken";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { SECTOR_COLOR } from "@/lib/theme";
+
+/**
+ * Why nobody can be led off this tile, in the player's own words.
+ *
+ * The reducer refuses three different ways and each refusal used to arrive as
+ * an Escort button that simply did nothing. The Crisis Token line is the one
+ * that matters: the chip on the tile said "Crisis Token" and stopped there,
+ * which taught the table nothing about the rule it is there to teach.
+ *
+ * These belong in lib/i18n/en.ts; that file is owned by another lane, so they
+ * are gathered here rather than written inline in the JSX.
+ */
+const REFUSAL_TEXT: Record<EscortRefusal, string> = {
+  crisis_token:
+    "Evacuation is blocked here. The story about this tile is still unproven, and the crowd will not be led while it stands. Verify the News Card, or let the Andean Llama lift the token.",
+  evacuation_locked:
+    "Evacuation out of this tile is locked for the rest of this round by the News Card.",
+  block_escort:
+    "The disaster has cut this sector off. Nobody can be escorted in or out of it this round.",
+};
 
 /**
  * Panel rinci ubin terpilih. Ini juga jalur akses cadangan: semua aksi di ubin
@@ -45,6 +66,9 @@ export function TileInspector({
     (tile.isReadyPost ? id.board.posSiaga : "");
   const here = tile.index === current.position;
   const hancur = tile.damage === 2;
+  // Computed for the tile itself, not for one destination: whatever the target,
+  // these three refusals fire before the route is even considered.
+  const refusal = escortRefusalHere(state, tile);
 
   return (
     <section className="space-y-2 rounded-2xl border-2 border-zinc-200 bg-white p-2.5">
@@ -98,21 +122,35 @@ export function TileInspector({
           {id.board.damageHint[tile.damage === 1 ? 1 : 2]}
         </p>
       )}
+      {/* The chip names the state; the sentence under it says what the state
+          costs you. A token nobody can read the consequence of is decoration. */}
       {tile.hasCrisisToken && (
-        <p className="flex items-center gap-1.5 rounded-lg bg-orange-50 p-2 text-[11px] font-bold text-lava">
-          <Wind className="h-3.5 w-3.5 shrink-0" />
-          {id.board.crisisToken}
-        </p>
+        <div className="rounded-lg bg-orange-50 p-2 text-[11px] leading-snug text-lava">
+          <p className="flex items-center gap-1.5 font-bold">
+            <Wind className="h-3.5 w-3.5 shrink-0" />
+            {id.board.crisisToken}
+          </p>
+          <p className="mt-1 font-bold">{REFUSAL_TEXT.crisis_token}</p>
+        </div>
       )}
       {tile.evacuationLocked && (
-        <p className="flex items-center gap-1.5 rounded-lg bg-zinc-100 p-2 text-[11px] font-bold text-zinc-700">
-          <Lock className="h-3.5 w-3.5 shrink-0" />
-          {id.board.evacuationLocked}
+        <div className="rounded-lg bg-zinc-100 p-2 text-[11px] leading-snug text-zinc-700">
+          <p className="flex items-center gap-1.5 font-bold">
+            <Lock className="h-3.5 w-3.5 shrink-0" />
+            {id.board.evacuationLocked}
+          </p>
+          <p className="mt-1 font-bold">{REFUSAL_TEXT.evacuation_locked}</p>
+        </div>
+      )}
+      {refusal === "block_escort" && (
+        <p className="flex items-start gap-1.5 rounded-lg bg-zinc-100 p-2 text-[11px] font-bold leading-snug text-zinc-700">
+          <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          {REFUSAL_TEXT.block_escort}
         </p>
       )}
 
       {/* Pindah ke sini. The footprint was a 16px glyph nobody noticed, so it is
-          now a 24px mark on a light disc — the same silhouette that pulses on
+          now a 24px mark on a light disc: the same silhouette that pulses on
           the destination hexagon, at a size that survives a 375px screen. */}
       {move && canAct && (
         <Button
@@ -168,7 +206,9 @@ export function TileInspector({
                       <Button
                         variant={picked ? "primary" : "safe"}
                         className="px-2.5 text-xs"
-                        disabled={current.ap < escortCost}
+                        // The reducer would refuse this outright, so the button
+                        // that starts the selection is where it has to stop.
+                        disabled={current.ap < escortCost || refusal !== null}
                         onClick={() => onToggleEscort(v)}
                       >
                         <HandHelping className="mr-1 inline h-3.5 w-3.5" />

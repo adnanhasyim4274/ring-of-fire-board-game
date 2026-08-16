@@ -5,7 +5,7 @@
 // Source: docs/00-MASTER-SPEC-v3.md §4.5
 // ============================================================================
 
-import type { RewardCard } from "@/engine/types";
+import type { RewardCard, RewardEffectKey } from "@/engine/types";
 
 export const rewardCards: RewardCard[] = [
   {
@@ -94,12 +94,46 @@ export const rewardCardById: Record<string, RewardCard> = Object.fromEntries(
   rewardCards.map((c) => [c.id, c])
 );
 
+/**
+ * Every effect key above appears on exactly two cards, but the standing bonuses
+ * are read with a yes/no test (`hasReward`) and applied once, so a second copy
+ * of the same effect used to be a silent waste of Reputation.
+ *
+ * The fix is refusal rather than stacking: stacking would hand a team that
+ * banks Reputation +2 AP, +4 hand limit and free crossings, which is exactly
+ * the pressure the Panic Meter is supposed to keep on. `clear_chaos` is the one
+ * exception — it is a one-shot that discards a Chaos card, so a second copy is
+ * a second use, not a duplicate bonus.
+ */
+export const REPEATABLE_REWARD_EFFECTS: readonly RewardEffectKey[] = ["clear_chaos"];
+
+export function isRepeatableReward(effectKey: RewardEffectKey): boolean {
+  return REPEATABLE_REWARD_EFFECTS.includes(effectKey);
+}
+
+/**
+ * The team already owns a card granting this effect, and buying another would
+ * do nothing. Ready before the click, so the shop can say so on the card.
+ */
+export function isRewardEffectCovered(
+  effectKey: RewardEffectKey,
+  owned: readonly string[]
+): boolean {
+  if (isRepeatableReward(effectKey)) return false;
+  return owned.some((id) => rewardCardById[id]?.effectKey === effectKey);
+}
+
 /** Kartu Reward yang mampu dibeli dengan Reputasi sekarang, termurah lebih dulu. */
 export function affordableRewards(
   reputation: number,
   owned: string[] = []
 ): RewardCard[] {
   return rewardCards
-    .filter((r) => !owned.includes(r.id) && r.cost <= reputation)
+    .filter(
+      (r) =>
+        !owned.includes(r.id) &&
+        r.cost <= reputation &&
+        !isRewardEffectCovered(r.effectKey, owned)
+    )
     .sort((a, b) => a.cost - b.cost);
 }

@@ -48,6 +48,34 @@ const HINT_CLASS: Record<LockHintKind, string> = {
   blocked: "text-red-600",
 };
 
+/**
+ * Two round effects refuse a discard the Bottom Zone still advertises:
+ * `no_evidence_move` bars the two movement resources, `block_trade` bars the
+ * Logistic Assist swap. Mirrors the guards in the DISCARD_FOR_RESOURCE case.
+ *
+ * Belongs in lib/i18n/en.ts; that file is owned by another lane.
+ */
+const DISCARD_BLOCKED_TEXT = {
+  no_evidence_move: "Evidence cannot be discarded for movement this round.",
+  block_trade: "Total gridlock: cards cannot be swapped this round.",
+} as const;
+
+function discardBlockedReason(
+  card: EvidenceCard,
+  roundEffectKey: string | undefined
+): string | null {
+  if (roundEffectKey === "block_trade" && card.resourceKind === "trade") {
+    return DISCARD_BLOCKED_TEXT.block_trade;
+  }
+  if (
+    roundEffectKey === "no_evidence_move" &&
+    (card.resourceKind === "ap2" || card.resourceKind === "alt_route")
+  ) {
+    return DISCARD_BLOCKED_TEXT.no_evidence_move;
+  }
+  return null;
+}
+
 export function EvidenceCardHand({
   state,
   player,
@@ -67,7 +95,8 @@ export function EvidenceCardHand({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const news = state.activeNews;
-  const barterBlocked = state.activeDisaster?.roundEffectKey === "block_trade";
+  const roundEffectKey = state.activeDisaster?.roundEffectKey;
+  const barterBlocked = roundEffectKey === "block_trade";
 
   /**
    * Pure, derived during render — mirrors the guards in the PLAY_EVIDENCE_LOCK
@@ -122,6 +151,7 @@ export function EvidenceCardHand({
         {entries.map(({ key, card, hint }) => {
           const isOpen = expanded === key;
           const isBlocked = isCategoryBlocked(state, card.category);
+          const discardBlocked = discardBlockedReason(card, roundEffectKey);
           // De-emphasised, never disabled: spending and trading are real moves.
           const dimmed = hint !== null && hint.kind !== "opens";
 
@@ -238,6 +268,11 @@ export function EvidenceCardHand({
                       <p className="text-[11px] leading-snug text-amber-900">
                         {card.resourceEffect}
                       </p>
+                      {discardBlocked && (
+                        <p className="mt-1 text-[11px] font-bold leading-snug text-red-700">
+                          {discardBlocked}
+                        </p>
+                      )}
                     </div>
 
                     {isBlocked && (
@@ -276,11 +311,13 @@ export function EvidenceCardHand({
                         <Button
                           variant="secondary"
                           className="flex-1 text-xs"
-                          disabled={!canAct}
+                          disabled={!canAct || discardBlocked !== null}
                           onClick={() => onDiscard(card)}
                         >
                           <Recycle className="mr-1 inline h-3.5 w-3.5" />
-                          {id.evidence.discardFor} {card.resourceName}
+                          {discardBlocked === null
+                            ? `${id.evidence.discardFor} ${card.resourceName}`
+                            : id.evidence.blockedRound}
                         </Button>
                       )}
                       {onBarter && (

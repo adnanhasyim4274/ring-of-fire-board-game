@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { DISASTER_CATEGORY_CLASS } from "@/lib/theme";
 import { ART } from "@/data/artManifest";
+import { PrintedImage, usePrintedArt } from "@/components/cards/PrintedCard";
 
 export function DisasterCardReveal({
   card,
@@ -23,8 +24,11 @@ export function DisasterCardReveal({
   // carries the title, the round effect and the final consequence, so rendering
   // the text panel underneath it as well just says everything twice. The text
   // layout stays as the fallback for cards without artwork and for the compact
-  // in-round summary, and the same words are kept for screen readers.
-  const art = compact ? undefined : ART.disasterCard[card.id];
+  // in-round summary, and the same words are kept for screen readers. It is
+  // also the fallback if the file itself fails to load, which is what
+  // `usePrintedArt` returning null covers: a reveal that showed nothing but a
+  // broken image would hide the rules for the whole round.
+  const art = usePrintedArt(compact ? undefined : ART.disasterCard[card.id]);
 
   return (
     <motion.article
@@ -39,13 +43,7 @@ export function DisasterCardReveal({
     >
       {art ? (
         <>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={art}
-            alt=""
-            className="block h-auto w-full"
-            draggable={false}
-          />
+          <PrintedImage art={art} className="block h-auto w-full" />
           <span className="sr-only">
             {id.disaster.category[card.category]}. {card.title}. {sectors}.{" "}
             {card.description} {id.disaster.roundEffect}: {card.roundEffect}{" "}

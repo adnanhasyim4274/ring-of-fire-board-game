@@ -43,7 +43,7 @@ const sectors: RingSector[] = [
     name: "Sunda Arc",
     region: "Java, Sumatra, Sunda Strait",
     hoaxTheme:
-      "Volcanism blown out of proportion — eruptions retold as the end of the world, as in \"the next Krakatau blast will split Java in two\".",
+      "Volcanism blown out of proportion: eruptions retold as the end of the world, as in \"the next Krakatau blast will split Java in two\".",
     tileIndices: [1, 2, 3],
     readyPostIndex: 0,
     color: "Red",
@@ -54,7 +54,7 @@ const sectors: RingSector[] = [
     name: "Philippine Arc",
     region: "Luzon, Mindanao, Taiwan",
     hoaxTheme:
-      "Submarine volcanoes — AI video of a \"new island rising\", drowned-continent myths, and fake bulletins signed with the PHIVOLCS logo.",
+      "Submarine volcanoes: AI video of a \"new island rising\", drowned-continent myths, and fake bulletins signed with the PHIVOLCS logo.",
     tileIndices: [5, 6, 7],
     readyPostIndex: 4,
     color: "Blue",
@@ -65,7 +65,7 @@ const sectors: RingSector[] = [
     name: "Hokkaido Arc",
     region: "Japan, Kuril Islands, Kamchatka",
     hoaxTheme:
-      "Tsunami — AI-generated \"25-metre wave\" clips and counterfeit early warnings that copy the wording and typography of JMA.",
+      "Tsunami: AI-generated \"25-metre wave\" clips and counterfeit early warnings that copy the wording and typography of JMA.",
     tileIndices: [9, 10, 11],
     readyPostIndex: 8,
     color: "Teal",
@@ -76,7 +76,7 @@ const sectors: RingSector[] = [
     name: "Cascadia Arc",
     region: "Alaska, the Aleutians, Cascadia, San Andreas",
     hoaxTheme:
-      "Megathrust panic — prophecies with an exact date, doctored crack photos, and weather-weapon conspiracies built around HAARP.",
+      "Megathrust panic: prophecies with an exact date, doctored crack photos, and weather-weapon conspiracies built around HAARP.",
     tileIndices: [13, 14, 15],
     readyPostIndex: 12,
     color: "Green",
@@ -87,7 +87,7 @@ const sectors: RingSector[] = [
     name: "Andes Arc",
     region: "Peru, Chile, the Atacama",
     hoaxTheme:
-      "Mountain earthquakes — recycled photos of split highways, invented death tolls, and donation drives that lead to a stranger's wallet.",
+      "Mountain earthquakes: recycled photos of split highways, invented death tolls, and donation drives that lead to a stranger's wallet.",
     tileIndices: [17, 18, 19],
     readyPostIndex: 16,
     color: "Ochre",
@@ -98,7 +98,7 @@ const sectors: RingSector[] = [
     name: "South Pacific Arc",
     region: "New Zealand, Tonga, Vanuatu",
     hoaxTheme:
-      "Geysers and atolls — \"an island vanished overnight\", plus local superstition weaponised into instructions that contradict the evacuation plan.",
+      "Geysers and atolls: \"an island vanished overnight\", plus local superstition weaponised into instructions that contradict the evacuation plan.",
     tileIndices: [21, 22, 23],
     readyPostIndex: 20,
     color: "Magenta",

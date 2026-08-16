@@ -35,8 +35,13 @@ export const roles: GuardianRole[] = [
       "If you end a move on a tile holding villagers, gain +1 AP that may only be spent on Escort.",
     activeKey: "tactical_escort",
     subMissionName: "Frontline Rescuer",
+    // This used to read "picked up directly from tiles carrying a Crisis
+    // Token", which no legal sequence of actions can ever do: a Crisis Token
+    // is exactly what stops villagers being led off a tile. The frontline is
+    // now the region the rumour is ABOUT, which is reachable and still means
+    // walking into the loudest part of the board.
     subMission:
-      "Evacuate 5 villagers picked up directly from tiles carrying a Crisis Token.",
+      "Bring 5 villagers to a Ready Post out of the sector this round's News Card names.",
     subMissionKey: "rescue_crisis",
     subMissionTarget: 5,
     playstyle:
@@ -134,14 +139,14 @@ export const roles: GuardianRole[] = [
       "Sea Lane tiles cost you only 1 AP instead of 2, and you may carry a villager across with you.",
     activeName: "Deep Current",
     active:
-      "Move 1 villager from any tile onto an adjacent Sea Lane tile, or from a Sea Lane tile onto an adjacent Ready Post.",
+      "Standing at a mouth of the Sea Lane, lift 1 calm villager from a neighbouring tile into the water. Standing in the water, walk 1 calm villager on your tile one hex along the lane: at the far mouth, that is safety.",
     activeKey: "open_water",
     subMissionName: "Safe Passage",
     subMission: "Bring 3 villagers across the Sea Lane and all the way to safety.",
     subMissionKey: "safe_passage",
     subMissionTarget: 3,
     playstyle:
-      "The shortcut: turns a 12-tile walk around the rim into a three-hex swim — as long as the ocean stays open.",
+      "The shortcut: turns a 12-tile walk around the rim into a three-hex swim, as long as the ocean stays open.",
   },
 ];
 

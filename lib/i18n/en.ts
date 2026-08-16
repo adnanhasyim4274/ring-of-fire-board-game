@@ -12,9 +12,9 @@ export const en = {
   tagline: "Wildlife Guardians of the Pacific Ring of Fire",
 
   meta: {
-    title: "Ring of Fire — Wildlife Guardians of the Pacific",
+    title: "Ring of Fire: Wildlife Guardians of the Pacific",
     description:
-      "A cooperative board game about disaster response and media literacy. Filter the rumours, hold the panic down, and get people to the Ready Posts — together.",
+      "A cooperative board game about disaster response and media literacy. Filter the rumours, hold the panic down, and get people to the Ready Posts: together.",
   },
 
   common: {
@@ -25,7 +25,7 @@ export const en = {
     confirm: "Yes, go ahead",
     next: "Next",
     of: "of",
-    none: "—",
+    none: ": ",
     home: "Home",
     ap: "AP",
     points: "pts",
@@ -35,7 +35,7 @@ export const en = {
 
   home: {
     blurb:
-      "The Pacific Ring of Fire is waking up. But something travels faster than lava: a rumour. As Wildlife Guardians, filter what comes in — fact or hoax — and get people to the Ready Posts before the mountain decides for you.",
+      "The Pacific Ring of Fire is waking up. But something travels faster than lava: a rumour. As Wildlife Guardians, filter what comes in, fact or hoax, and get people to the Ready Posts before the mountain decides for you.",
     playNow: "Start the Mission",
     continueGame: "Continue Game",
     howToPlay: "How to Play",
@@ -180,7 +180,7 @@ export const en = {
       2: "Impassable. Anyone still on it is lost.",
     },
     legend: "Legend",
-    clockwise: "Villagers evacuate clockwise",
+    clockwise: "Villagers can be escorted either way around the ring",
     tapTile: "Tap a tile to see what is on it",
     tileEmpty: "Empty tile.",
     seaLane: "Sea Lane",
@@ -210,13 +210,13 @@ export const en = {
     postedBy: "Forwarded from another group",
     attached: "Attached content",
     targetSector: "Target sector",
-    locks: "5W1H locks — both must open",
+    locks: "5W1H locks: both must open",
     lockOpen: "Open",
     lockClosed: "Locked",
     lockOpenedBy: "Opened by",
     front: "Front",
     back: "Back",
-    statusHidden: "Fact or hoax? Do not guess — prove it.",
+    statusHidden: "Fact or hoax? Do not guess: prove it.",
     truth: "True status",
     truthHoax: "HOAX",
     truthFakta: "FACT",
@@ -254,7 +254,7 @@ export const en = {
     stepDone: "done",
     prompt: "What is the team's verdict?",
     locksIncomplete:
-      "The locks are not both open. You may still commit — but if you are right, it only counts as a Lucky Guess.",
+      "The locks are not both open. You may still commit, but if you are right, it only counts as a Lucky Guess.",
     locksComplete: "Both locks are open. Your verdict has something behind it.",
     hoax: "HOAX",
     fakta: "FACT",
@@ -282,7 +282,7 @@ export const en = {
     },
     lucky_guess: {
       label: "LUCKY GUESS",
-      headline: "Right verdict — but the locks were not both open.",
+      headline: "Right verdict, but the locks were not both open.",
       body: "No Reputation. The Crisis Token stays on the board.",
       lesson:
         "Being right by guessing is not literacy. What is scored is not your answer, but how you got there.",
@@ -290,7 +290,7 @@ export const en = {
     rumour_spreads: {
       label: "RUMOUR SPREADS",
       headline: "Wrong verdict, or the team abstained.",
-      body: "+1 Panic. Draw 1 Chaos card. The \"if ignored\" effect applies.",
+      body: "+1 Panic, plus the card's own \"if ignored\" cost, which is another +1 on every News card in the deck. Draw 1 Chaos card.",
     },
   },
 
@@ -305,15 +305,15 @@ export const en = {
     reveal: "Tap to reveal your hand (make sure only you can see it)",
     hide: "Hide hand",
     whoseHand: "Whose hand?",
-    zonaAtas: "Top Zone — MIL effect",
-    zonaBawah: "Bottom Zone — Resource",
+    zonaAtas: "Top Zone: MIL effect",
+    zonaBawah: "Bottom Zone: Resource",
     playToLock: "Play onto a lock",
     playToLockShort: "Play",
     discardFor: "Discard for",
     noMatch: "Does not match either lock on this card",
     blockedRound: "Blocked this round",
     blockedChaos: "Blocked by a Chaos card",
-    wildcard: "Wildcard — opens any lock",
+    wildcard: "Wildcard: opens any lock",
     pickLock: "Which lock do you want to open?",
     barter: "Barter",
     barterTitle: "Barter Evidence",
@@ -349,7 +349,7 @@ export const en = {
       "Handing the card over for someone else to read",
       "Quietly showing it to one player only",
     ],
-    why: "Because you cannot read it out verbatim, you are forced to put the idea in your own words — and that is exactly the proof that you understood it.",
+    why: "Because you cannot read it out verbatim, you are forced to put the idea in your own words, and that is exactly the proof that you understood it.",
     compact: "Describe your evidence in your own words. Do not show the card.",
   },
 
@@ -422,7 +422,7 @@ export const en = {
     toImpact: "On to Impact",
     posSiagaBonus: "Ready Post bonus available when you end your turn here.",
     seaRouteBlocked: "The Sea Lane is closed (Oceanic disaster).",
-    tileImpassable: "Destroyed tile — nobody can enter.",
+    tileImpassable: "Destroyed tile: nobody can enter.",
   },
 
   peek: {
@@ -430,14 +430,14 @@ export const en = {
     disaster: "Next Disaster Card",
     news: "Next News Card",
     hand: "That player's hand",
-    close: "Got it — keep it quiet",
+    close: "Got it: keep it quiet",
   },
 
   gameOver: {
     winTitle: "The Ring Settles",
     loseTitle: "Mission Failed",
     reasons: {
-      win: "You hit the evacuation target before the Disaster deck ran out. People got out because the information was verified — not because you got lucky.",
+      win: "You hit the evacuation target before the Disaster deck ran out. People got out because the information was verified: not because you got lucky.",
       panic:
         "The Panic Meter filled. Nobody trusts the Guardians any more, and evacuation became impossible.",
       casualties:
@@ -459,7 +459,7 @@ export const en = {
       reputation: "Final Reputation",
     },
     literacyNote:
-      "Look at the Lucky Guess number. That is how many times you were right without knowing why — and it is the first thing to fix next game.",
+      "Look at the Lucky Guess number. That is how many times you were right without knowing why, and it is the first thing to fix next game.",
     playAgain: "Play Again",
     backHome: "Back to Home",
   },
@@ -483,7 +483,7 @@ export const en = {
 
   timer: {
     label: "Discussion timer",
-    timeUp: "Time is up — decide now",
+    timeUp: "Time is up: decide now",
   },
 
   /**
@@ -618,7 +618,7 @@ export const en = {
       {
         tag: "RUMOUR SPREADS",
         cond: "Wrong verdict, or the table abstained",
-        result: "+1 Panic, and you draw a Chaos card",
+        result: "+2 Panic in practice, one for the outcome and one from the card, and you draw a Chaos card",
         tone: "bad" as const,
       },
     ],
@@ -644,17 +644,17 @@ export const en = {
     sections: {
       goal: {
         title: "The Goal",
-        body: "Get enough Villager tokens to a Ready Post before the Disaster deck runs out. You win together or lose together — there is no single winner.",
+        body: "Get enough Villager tokens to a Ready Post before the Disaster deck runs out. You win together or lose together: there is no single winner.",
         bullets: [
           "Win: the evacuation target reaches a Ready Post before the Disaster deck is empty. The target scales with the table: 12 villagers with 2 Guardians, 13 with 3, 15 with 4 or more.",
-          "Lose — Literacy Failure: the Panic Meter reaches 6.",
-          "Lose — Casualties: too few villagers remain for the target to be reachable.",
-          "Lose — Out of Time: the last Disaster Card is drawn with the target unmet.",
+          "Lose: Literacy Failure: the Panic Meter reaches 6.",
+          "Lose: Casualties: too few villagers remain for the target to be reachable.",
+          "Lose: Out of Time: the last Disaster Card is drawn with the target unmet.",
         ],
       },
       board: {
         title: "The Board: The Ring",
-        body: "The board is the Ring of Fire itself — 27 hexagonal tiles, 24 forming a closed ring with a Sea Lane cutting straight through the hole in the middle.",
+        body: "The board is the Ring of Fire itself: 27 hexagonal tiles, 24 forming a closed ring with a Sea Lane cutting straight through the hole in the middle.",
         bullets: [
           "24 rim tiles: 6 sectors of 3 land tiles, with a Ready Post at each junction.",
           "Rim neighbours are simply one step left or right along the ring.",
@@ -665,11 +665,11 @@ export const en = {
         ],
       },
       loop: {
-        title: "The Round — 5 Phases",
+        title: "The Round: 5 Phases",
         body: "Every round runs in a fixed order. The order is never rearranged.",
       },
       turns: {
-        title: "Phase 3 — Spending 4 AP",
+        title: "Phase 3: Spending 4 AP",
         body: "Each player gets 4 Action Points per round and may repeat the same action as long as the AP holds out.",
         costs: [
           { action: "Move to an adjacent tile", cost: "1 AP (2 AP if the destination is Cracked)" },
@@ -684,12 +684,12 @@ export const en = {
         ],
       },
       commitFlip: {
-        title: "Commit & Flip — the heart of the game",
+        title: "Commit & Flip: the heart of the game",
         body: "There is no computer at the table that knows the answer. So the card itself becomes the computer. Three steps, and the order is absolute.",
         steps: [
           {
             title: "1. COMMIT",
-            body: "Open both 5W1H locks with matching Evidence — the 3-point HOW card is a wildcard that opens any lock. Then say the verdict out loud together and place the Verdict token: HOAX, FACT or Abstain. Once it is down, nobody changes their mind.",
+            body: "Open both 5W1H locks with matching Evidence: the 3-point HOW card is a wildcard that opens any lock. Then say the verdict out loud together and place the Verdict token: HOAX, FACT or Abstain. Once it is down, nobody changes their mind.",
           },
           {
             title: "2. FLIP",
@@ -697,7 +697,7 @@ export const en = {
           },
           {
             title: "3. RESOLVE",
-            body: "Compare your verdict against the answer. There are exactly three outcomes — and two of them look similar but mean very different things.",
+            body: "Compare your verdict against the answer. There are exactly three outcomes, and two of them look similar but mean very different things.",
           },
         ],
         note: "Feedback always arrives, 100% of the time. What changes is not whether you get told, but what it costs you.",
@@ -706,8 +706,8 @@ export const en = {
         title: "Evidence cards do two jobs",
         body: "Every Evidence card has two zones, and you only ever get to use one of them.",
         bullets: [
-          "Top Zone — MIL effect: opens one lock of its category.",
-          "Bottom Zone — Resource: discard it for a tactical gain (extra AP, an alternate route, a free calm, and so on).",
+          "Top Zone: MIL effect: opens one lock of its category.",
+          "Bottom Zone: Resource: discard it for a tactical gain (extra AP, an alternate route, a free calm, and so on).",
           "The 3-point HOW card (Official Confirmation) is a wildcard: it opens a lock of any category.",
           "That is the dilemma: use it to prove the truth, or spend it to save someone faster. Never both.",
         ],
@@ -720,13 +720,13 @@ export const en = {
         title: "Reputation, Chaos and Rewards",
         bullets: [
           "A correct, fully-locked verification gives +1 Reputation. A finished Sub-Mission gives +2.",
-          "A failed verification draws a Chaos card — a team-wide setback that stays until it is bought off.",
+          "A failed verification draws a Chaos card: a team-wide setback that stays until it is bought off.",
           "In Phase 5 you may trade Reputation for Reward cards: permanent upgrades for the whole team.",
         ],
       },
       demo: {
         title: "About this demo",
-        body: "This web prototype is a supporting demo, not the finished product. The physical board game is the real deliverable — this only shows that the mechanics hold up.",
+        body: "This web prototype is a supporting demo, not the finished product. The physical board game is the real deliverable: this only shows that the mechanics hold up.",
       },
     },
   },

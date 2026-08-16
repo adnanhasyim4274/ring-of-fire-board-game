@@ -7,8 +7,13 @@ import {
   BookOpen,
   Boxes,
   Check,
+  ChevronDown,
+  Coins,
+  FileSearch,
   Gavel,
+  Info,
   Library,
+  ListOrdered,
   Map as MapIcon,
   Play,
   Search,
@@ -22,6 +27,7 @@ import { roles } from "@/data/roles";
 import { ringOfFireScenario } from "@/data/scenarios";
 import { tileTypeById } from "@/data/tileTypes";
 import { Button } from "@/components/ui/Button";
+import { PageNav, type PageNavItem } from "@/components/PageNav";
 import { PHASE_ORDER } from "@/components/hud/PhaseIndicator";
 import { OutcomeBanner } from "@/components/cards/OutcomeBanner";
 import {
@@ -45,6 +51,62 @@ const DAMAGE_STAGES = [0, 1, 2] as const;
 const SEA_LANE_ENDPOINTS: [number, number] = [0, 12];
 const SECTOR_ORDER = ["sunda", "philippine", "hokkaido", "cascadia", "andes", "south_pacific"] as const;
 const sectorOf = (i: number) => SECTOR_ORDER[Math.floor(i / 4) % 6];
+
+const s = id.howTo.sections;
+
+/**
+ * Playtest note: "the How to Play part feels too long, and there is no guide or
+ * table of contents". The page now has one, and this is the order it walks:
+ * what you are trying to do, where you do it, who you are, how a round runs,
+ * how you prove things, and only then the two long reference lists.
+ *
+ * The short labels below are the only strings on this page that do not already
+ * exist in `lib/i18n/en.ts`. That module belongs to another part of the build,
+ * so, following the pattern `lib/reference.ts` set with `REFERENCE_LABELS`,
+ * they are declared here in the file that owns the page. They are names for
+ * things, never rules or numbers: every rule and every count on this page still
+ * comes from `data/`, `lib/reference.ts` or the i18n module.
+ */
+export const HOW_TO_SECTIONS: PageNavItem[] = [
+  { id: "goal", label: "The Goal" },
+  { id: "the-ring", label: "The Ring" },
+  { id: "tiles", label: "The tiles" },
+  { id: "guardians", label: "Guardians" },
+  { id: "phases", label: "The 5 phases" },
+  { id: "action-points", label: "Spending AP" },
+  { id: "evidence", label: "Evidence" },
+  { id: "commit-flip", label: "Commit & Flip" },
+  { id: "table-talk", label: "Table Talk" },
+  { id: "reputation", label: "Reputation" },
+  { id: "components", label: "In the box" },
+  { id: "glossary", label: "Glossary" },
+  { id: "demo", label: "This demo" },
+];
+
+export const HOW_TO_LABELS = {
+  readFirst: "Read this first",
+  readFirstHint: "The whole game in four lines. Everything below is detail.",
+  expand: "Open the list",
+} as const;
+
+/** The glossary, by id, so the summary can quote a rule instead of restating it. */
+const GLOSSARY = new Map(TERMS.flatMap((g) => g.terms.map((t) => [t.id, t.definition] as const)));
+
+/**
+ * The four lines for someone who reads nothing else: the goal, the shape of a
+ * round, the rule at the heart of the game, and the one table manner. Every
+ * line is quoted from strings the rest of the page already shows, so the
+ * summary cannot drift out of step with the rules.
+ */
+const READ_FIRST: { lead: string; body: string }[] = [
+  { lead: s.goal.title, body: s.goal.body },
+  { lead: s.loop.title, body: s.loop.body },
+  {
+    lead: s.commitFlip.title,
+    body: GLOSSARY.get("commit_flip") ?? s.commitFlip.note,
+  },
+  { lead: id.tableTalk.title, body: id.tableTalk.compact },
+];
 
 /**
  * Playtest note: "the image for the Sea Lane tiles seems to be missing from the
@@ -111,11 +173,10 @@ const tileGallery = buildTileGallery();
 const damageArt = ART.tile[TILE_ART.cascadia];
 
 export default function HowToPlayPage() {
-  const s = id.howTo.sections;
   const reference = useReference();
 
   return (
-    <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 p-4 pb-16">
+    <main className="mx-auto w-full max-w-2xl flex-1 p-4 pb-16 lg:max-w-5xl">
       <header className="flex items-center gap-2">
         <Link href="/" aria-label={id.common.back} className="-ml-1 rounded-lg p-3 hover:bg-black/5">
           <ArrowLeft className="h-5 w-5" />
@@ -129,12 +190,39 @@ export default function HowToPlayPage() {
         </div>
       </header>
 
+      {/* Four lines, above everything, for the reader who bounces off a wall of
+          rules. Nothing here is new: it is the same text, said first. */}
+      <section
+        aria-labelledby="read-first-heading"
+        className="mt-4 rounded-2xl border-2 border-lava/30 bg-white/70 p-3"
+      >
+        <h2
+          id="read-first-heading"
+          className="text-[11px] font-black uppercase tracking-widest text-lava"
+        >
+          {HOW_TO_LABELS.readFirst}
+        </h2>
+        <p className="mt-0.5 text-[11px] font-bold text-zinc-500">
+          {HOW_TO_LABELS.readFirstHint}
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {READ_FIRST.map((line) => (
+            <li key={line.lead} className="flex items-start gap-2 text-[13px] leading-snug">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+              <span className="min-w-0">
+                <b>{line.lead}</b> · <span className="text-zinc-700">{line.body}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {/* Playtesters wanted one place that explains every card and every term,
           reachable without scrolling the whole page. */}
       <Button
         variant="secondary"
         onClick={() => reference.setOpen(true)}
-        className="flex w-full items-center gap-2 text-left"
+        className="mt-4 flex w-full items-center gap-2 text-left"
       >
         <Search className="h-4 w-4 shrink-0 text-lava" />
         <span className="min-w-0">
@@ -146,296 +234,336 @@ export default function HowToPlayPage() {
       </Button>
       <ReferenceModal open={reference.open} onClose={reference.dismiss} />
 
-      {/* Tujuan */}
-      <Section title={s.goal.title} icon={<Target className="h-4 w-4" />}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.goal.body}</p>
-        <ul className="mt-2 space-y-1">
-          {s.goal.bullets.map((b) => (
-            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
-              {b}
-            </li>
-          ))}
-        </ul>
-      </Section>
+      {/* The table of contents sits in the left column on a wide screen, which
+          is otherwise empty margin, and pins to the top edge on a phone. */}
+      <div className="mt-4 lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:items-start lg:gap-8">
+        <PageNav items={HOW_TO_SECTIONS} />
 
-      {/* Papan */}
-      <Section title={s.board.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.board.body}</p>
-        <RingDiagram />
-        <ul className="mt-2 space-y-1">
-          {s.board.bullets.map((b) => (
-            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
-              {b}
-            </li>
-          ))}
-        </ul>
-      </Section>
+        <div className="space-y-6">
+          <Section id="goal" title={s.goal.title} icon={<Target className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.goal.body}</p>
+            <Bullets items={s.goal.bullets} />
+          </Section>
 
-      {/* Every tile kind, with its printed painting — Sea Lane included. */}
-      <Section title={REFERENCE_LABELS.tiles.heading} icon={<MapIcon className="h-4 w-4" />}>
-        <p className="text-sm leading-relaxed text-zinc-700">{REFERENCE_LABELS.tiles.body}</p>
-        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-          {tileGallery.map((t) => (
-            <li
-              key={t.key}
-              className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
-            >
-              <TileArtwork src={t.src} swatch={t.swatch} />
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-black">{t.title}</span>
-                <span className="block text-[11px] font-bold text-zinc-400">{t.subtitle}</span>
-                <span className="mt-1 block text-[12px] leading-snug text-zinc-700">
-                  {t.noteLabel ? (
-                    <b className="text-zinc-500">{t.noteLabel} · </b>
-                  ) : null}
-                  {t.note}
-                </span>
-                {t.immune ? (
-                  <span className="mt-1 inline-block rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
-                    {REFERENCE_LABELS.tiles.immune}
+          <Section id="the-ring" title={s.board.title} icon={<MapIcon className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.board.body}</p>
+            <RingDiagram />
+            <Bullets items={s.board.bullets} />
+          </Section>
+
+          {/* Every tile kind, with its printed painting — Sea Lane included. */}
+          <Section id="tiles" title={REFERENCE_LABELS.tiles.heading}>
+            <p className="text-sm leading-relaxed text-zinc-700">{REFERENCE_LABELS.tiles.body}</p>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {tileGallery.map((t) => (
+                <li
+                  key={t.key}
+                  className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
+                >
+                  <TileArtwork src={t.src} swatch={t.swatch} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-black">{t.title}</span>
+                    <span className="block text-[11px] font-bold text-zinc-400">{t.subtitle}</span>
+                    <span className="mt-1 block text-[12px] leading-snug text-zinc-700">
+                      {t.noteLabel ? (
+                        <b className="text-zinc-500">{t.noteLabel} · </b>
+                      ) : null}
+                      {t.note}
+                    </span>
+                    {t.immune ? (
+                      <span className="mt-1 inline-block rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-emerald-700">
+                        {REFERENCE_LABELS.tiles.immune}
+                      </span>
+                    ) : null}
                   </span>
-                ) : null}
-              </span>
-            </li>
-          ))}
-        </ul>
+                </li>
+              ))}
+            </ul>
 
-        <h3 className="mt-4 text-sm font-black uppercase tracking-wide text-lava">
-          {REFERENCE_LABELS.tiles.damageHeading}
-        </h3>
-        <p className="mt-0.5 text-[12px] leading-snug text-zinc-600">
-          {REFERENCE_LABELS.tiles.damageBody}
-        </p>
-        <ul className="mt-2 grid grid-cols-3 gap-2">
-          {DAMAGE_STAGES.map((stage) => (
-            <li
-              key={stage}
-              className="rounded-xl border-2 border-zinc-200 bg-white p-2 text-center"
-            >
-              <TileArtwork
-                src={stage === 2 ? damageArt.destroyed : damageArt.normal}
-                swatch={SECTOR_COLOR.cascadia}
-                className="mx-auto"
-              />
-              <span className="mt-1 block text-[12px] font-black">{id.board.damage[stage]}</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
-                {stage === 0 ? REFERENCE_LABELS.tiles.damageNormal : id.board.damageHint[stage]}
-              </span>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-[11px] font-bold leading-snug text-zinc-500">
-          {REFERENCE_LABELS.tiles.crackNote}
-        </p>
-      </Section>
+            <h3 className="mt-4 text-sm font-black uppercase tracking-wide text-lava">
+              {REFERENCE_LABELS.tiles.damageHeading}
+            </h3>
+            <p className="mt-0.5 text-[12px] leading-snug text-zinc-600">
+              {REFERENCE_LABELS.tiles.damageBody}
+            </p>
+            <ul className="mt-2 grid grid-cols-3 gap-2">
+              {DAMAGE_STAGES.map((stage) => (
+                <li
+                  key={stage}
+                  className="rounded-xl border-2 border-zinc-200 bg-white p-2 text-center"
+                >
+                  <TileArtwork
+                    src={stage === 2 ? damageArt.destroyed : damageArt.normal}
+                    swatch={SECTOR_COLOR.cascadia}
+                    className="mx-auto"
+                  />
+                  <span className="mt-1 block text-[12px] font-black">{id.board.damage[stage]}</span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
+                    {stage === 0 ? REFERENCE_LABELS.tiles.damageNormal : id.board.damageHint[stage]}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[11px] font-bold leading-snug text-zinc-500">
+              {REFERENCE_LABELS.tiles.crackNote}
+            </p>
+          </Section>
 
-      {/* 5 fase */}
-      <Section title={s.loop.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.loop.body}</p>
-        <ol className="mt-2 space-y-1.5">
-          {PHASE_ORDER.map((p) => (
-            <li
-              key={p}
-              className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
-            >
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lava text-sm font-black text-white">
-                {id.phases[p].num}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-black">{id.phases[p].name}</span>
-                <span className="block text-[12px] leading-snug text-zinc-600">
-                  {id.phases[p].hint}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      </Section>
+          {/* Who you are comes before what a round does: you pick a Guardian at
+              setup, and half the actions below are role-flavoured. */}
+          <Section id="guardians" title={s.roles.title} icon={<Users className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.roles.body}</p>
+            <ul className="mt-2 space-y-2">
+              {roles.map((role) => (
+                <li key={role.id} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
+                  <p className="flex items-center gap-2 text-sm font-black">
+                    <span className="text-xl leading-none">{emojiForRole(role.id)}</span>
+                    {role.name}
+                    <span className="text-[11px] font-bold text-zinc-400">{role.title}</span>
+                  </p>
+                  <p className="mt-1 text-[12px] leading-snug text-zinc-700">
+                    <b>{id.role.passive}</b> · {role.passiveName}: {role.passive}
+                  </p>
+                  <p className="text-[12px] leading-snug text-violet-800">
+                    <b>{id.role.active}</b> · {role.activeName}: {role.active}
+                  </p>
+                  <p className="text-[12px] leading-snug text-amber-800">
+                    <b>{id.role.subMission}</b> · {role.subMissionName}: {role.subMission}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </Section>
 
-      {/* Fase 3 — biaya AP */}
-      <Section title={s.turns.title} icon={<Zap className="h-4 w-4" />}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.turns.body}</p>
-        <ul className="mt-2 divide-y divide-zinc-200 overflow-hidden rounded-xl border-2 border-zinc-200 bg-white">
-          {s.turns.costs.map((c) => (
-            <li
-              key={c.action}
-              className="flex flex-wrap items-start justify-between gap-x-3 gap-y-0.5 p-2"
-            >
-              <span className="min-w-0 text-[13px] font-bold">{c.action}</span>
-              <span className="ml-auto text-[12px] font-black text-amber-700">{c.cost}</span>
-            </li>
-          ))}
-        </ul>
-      </Section>
+          <Section id="phases" title={s.loop.title} icon={<ListOrdered className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.loop.body}</p>
+            <ol className="mt-2 space-y-1.5">
+              {PHASE_ORDER.map((p) => (
+                <li
+                  key={p}
+                  className="flex items-start gap-2.5 rounded-xl border-2 border-zinc-200 bg-white p-2.5"
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-lava text-sm font-black text-white">
+                    {id.phases[p].num}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black">{id.phases[p].name}</span>
+                    <span className="block text-[12px] leading-snug text-zinc-600">
+                      {id.phases[p].hint}
+                    </span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </Section>
 
-      {/* Commit & Flip */}
-      <Section title={s.commitFlip.title} icon={<Gavel className="h-4 w-4" />}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.commitFlip.body}</p>
-        <ol className="mt-2 space-y-2">
-          {s.commitFlip.steps.map((step) => (
-            <li key={step.title} className="rounded-xl border-l-4 border-lava bg-white p-2.5">
-              <p className="text-sm font-black">{step.title}</p>
-              <p className="text-[13px] leading-snug text-zinc-600">{step.body}</p>
-            </li>
-          ))}
-        </ol>
+          <Section id="action-points" title={s.turns.title} icon={<Zap className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.turns.body}</p>
+            <ul className="mt-2 divide-y divide-zinc-200 overflow-hidden rounded-xl border-2 border-zinc-200 bg-white">
+              {s.turns.costs.map((c) => (
+                <li
+                  key={c.action}
+                  className="flex flex-wrap items-start justify-between gap-x-3 gap-y-0.5 p-2"
+                >
+                  <span className="min-w-0 text-[13px] font-bold">{c.action}</span>
+                  <span className="ml-auto text-[12px] font-black text-amber-700">{c.cost}</span>
+                </li>
+              ))}
+            </ul>
+          </Section>
 
-        <div className="mt-3 space-y-2">
-          <OutcomeBanner outcome="verified" />
-          <OutcomeBanner outcome="lucky_guess" />
-          <OutcomeBanner outcome="rumour_spreads" />
-        </div>
+          {/* Evidence before Commit & Flip: the locks are opened with these
+              cards, so the reader needs to know what they are first. */}
+          <Section id="evidence" title={s.evidence.title} icon={<FileSearch className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.evidence.body}</p>
+            <Bullets items={s.evidence.bullets} />
+          </Section>
 
-        <p className="mt-3 rounded-xl bg-zinc-100 p-2.5 text-[13px] font-bold leading-snug text-zinc-700">
-          {s.commitFlip.note}
-        </p>
-      </Section>
+          <Section id="commit-flip" title={s.commitFlip.title} icon={<Gavel className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.commitFlip.body}</p>
+            <ol className="mt-2 space-y-2">
+              {s.commitFlip.steps.map((step) => (
+                <li key={step.title} className="rounded-xl border-l-4 border-lava bg-white p-2.5">
+                  <p className="text-sm font-black">{step.title}</p>
+                  <p className="text-[13px] leading-snug text-zinc-600">{step.body}</p>
+                </li>
+              ))}
+            </ol>
 
-      {/* Table Talk Protocol */}
-      <Section title={id.tableTalk.title} icon={<Users className="h-4 w-4" />}>
-        <p className="text-sm font-bold italic text-violet-800">{id.tableTalk.lead}</p>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <ul className="space-y-1 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-2.5">
-            <li className="text-[11px] font-black uppercase tracking-wide text-emerald-700">
-              {id.tableTalk.allowed}
-            </li>
-            {id.tableTalk.allowedItems.map((item) => (
-              <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
-                <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                {item}
-              </li>
+            <div className="mt-3 space-y-2">
+              <OutcomeBanner outcome="verified" />
+              <OutcomeBanner outcome="lucky_guess" />
+              <OutcomeBanner outcome="rumour_spreads" />
+            </div>
+
+            <p className="mt-3 rounded-xl bg-zinc-100 p-2.5 text-[13px] font-bold leading-snug text-zinc-700">
+              {s.commitFlip.note}
+            </p>
+          </Section>
+
+          <Section id="table-talk" title={id.tableTalk.title} icon={<Users className="h-4 w-4" />}>
+            <p className="text-sm font-bold italic text-violet-800">{id.tableTalk.lead}</p>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <ul className="space-y-1 rounded-xl border-2 border-emerald-200 bg-emerald-50 p-2.5">
+                <li className="text-[11px] font-black uppercase tracking-wide text-emerald-700">
+                  {id.tableTalk.allowed}
+                </li>
+                {id.tableTalk.allowedItems.map((item) => (
+                  <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
+                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <ul className="space-y-1 rounded-xl border-2 border-red-200 bg-red-50 p-2.5">
+                <li className="text-[11px] font-black uppercase tracking-wide text-red-700">
+                  {id.tableTalk.forbidden}
+                </li>
+                {id.tableTalk.forbiddenItems.map((item) => (
+                  <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
+                    <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className="mt-2 rounded-xl bg-violet-50 p-2.5 text-[13px] leading-snug text-violet-900">
+              {id.tableTalk.why}
+            </p>
+          </Section>
+
+          <Section id="reputation" title={s.economy.title} icon={<Coins className="h-4 w-4" />}>
+            <Bullets items={s.economy.bullets} />
+          </Section>
+
+          {/* The two long reference lists. Folded by default so the page can be
+              scanned end to end, and the nav opens them on the way in. */}
+          <CollapsibleSection
+            id="components"
+            title={REFERENCE_LABELS.componentsHeading}
+            icon={<Boxes className="h-4 w-4" />}
+          >
+            {COMPONENTS.map((group) => (
+              <ComponentGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
             ))}
-          </ul>
-          <ul className="space-y-1 rounded-xl border-2 border-red-200 bg-red-50 p-2.5">
-            <li className="text-[11px] font-black uppercase tracking-wide text-red-700">
-              {id.tableTalk.forbidden}
-            </li>
-            {id.tableTalk.forbiddenItems.map((item) => (
-              <li key={item} className="flex items-start gap-1.5 text-[12px] leading-snug">
-                <X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600" />
-                {item}
-              </li>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            id="glossary"
+            title={REFERENCE_LABELS.termsHeading}
+            icon={<Library className="h-4 w-4" />}
+          >
+            {TERMS.map((group) => (
+              <TermGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
             ))}
-          </ul>
+          </CollapsibleSection>
+
+          <Section id="demo" title={s.demo.title} icon={<Info className="h-4 w-4" />}>
+            <p className="text-sm leading-relaxed text-zinc-700">{s.demo.body}</p>
+          </Section>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link href="/setup" className="flex-1">
+              <Button className="w-full">
+                <Play className="mr-2 inline h-5 w-5" />
+                {id.howTo.startNow}
+              </Button>
+            </Link>
+            <Link href="/" className="flex-1">
+              <Button variant="secondary" className="w-full">
+                {id.howTo.backHome}
+              </Button>
+            </Link>
+          </div>
         </div>
-        <p className="mt-2 rounded-xl bg-violet-50 p-2.5 text-[13px] leading-snug text-violet-900">
-          {id.tableTalk.why}
-        </p>
-      </Section>
-
-      {/* Evidence */}
-      <Section title={s.evidence.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.evidence.body}</p>
-        <ul className="mt-2 space-y-1">
-          {s.evidence.bullets.map((b) => (
-            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
-              {b}
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {/* Peran */}
-      <Section title={s.roles.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.roles.body}</p>
-        <ul className="mt-2 space-y-2">
-          {roles.map((role) => (
-            <li key={role.id} className="rounded-xl border-2 border-zinc-200 bg-white p-2.5">
-              <p className="flex items-center gap-2 text-sm font-black">
-                <span className="text-xl leading-none">{emojiForRole(role.id)}</span>
-                {role.name}
-                <span className="text-[11px] font-bold text-zinc-400">{role.title}</span>
-              </p>
-              <p className="mt-1 text-[12px] leading-snug text-zinc-700">
-                <b>{id.role.passive}</b> · {role.passiveName}: {role.passive}
-              </p>
-              <p className="text-[12px] leading-snug text-violet-800">
-                <b>{id.role.active}</b> · {role.activeName}: {role.active}
-              </p>
-              <p className="text-[12px] leading-snug text-amber-800">
-                <b>{id.role.subMission}</b> · {role.subMissionName}: {role.subMission}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-      {/* Ekonomi */}
-      <Section title={s.economy.title}>
-        <ul className="space-y-1">
-          {s.economy.bullets.map((b) => (
-            <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
-              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
-              {b}
-            </li>
-          ))}
-        </ul>
-      </Section>
-
-
-      {/* Everything in the box — playtesters asked for one list of the lot. */}
-      <Section
-        title={REFERENCE_LABELS.componentsHeading}
-        icon={<Boxes className="h-4 w-4" />}
-      >
-        <div className="space-y-4">
-          {COMPONENTS.map((group) => (
-            <ComponentGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
-          ))}
-        </div>
-      </Section>
-
-      {/* Glossary — the disaster words and the table words, in plain English. */}
-      <Section title={REFERENCE_LABELS.termsHeading} icon={<Library className="h-4 w-4" />}>
-        <div className="space-y-4">
-          {TERMS.map((group) => (
-            <TermGroupBlock key={group.id} group={group} headingClass="text-zinc-500" />
-          ))}
-        </div>
-      </Section>
-
-      {/* Catatan demo */}
-      <Section title={s.demo.title}>
-        <p className="text-sm leading-relaxed text-zinc-700">{s.demo.body}</p>
-      </Section>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Link href="/setup" className="flex-1">
-          <Button className="w-full">
-            <Play className="mr-2 inline h-5 w-5" />
-            {id.howTo.startNow}
-          </Button>
-        </Link>
-        <Link href="/" className="flex-1">
-          <Button variant="secondary" className="w-full">
-            {id.howTo.backHome}
-          </Button>
-        </Link>
       </div>
     </main>
   );
 }
 
+/**
+ * Sections are focus targets, not just scroll targets: the nav moves focus here
+ * so a keyboard or screen reader user carries on from the heading. The scroll
+ * margin keeps the heading clear of the pinned nav on a phone.
+ */
+const SECTION_SHELL =
+  "scroll-mt-20 focus-visible:rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-lava lg:scroll-mt-8";
+
+const SECTION_HEADING = "flex items-center gap-1.5 text-lg font-black text-lava";
+
 function Section({
+  id: sectionId,
   title,
   icon,
   children,
 }: {
+  id: string;
   title: string;
   icon?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section>
-      <h2 className="mb-1.5 flex items-center gap-1.5 text-lg font-black text-lava">
+    <section id={sectionId} tabIndex={-1} className={SECTION_SHELL}>
+      <h2 className={cn("mb-1.5", SECTION_HEADING)}>
         {icon}
         {title}
       </h2>
       {children}
     </section>
+  );
+}
+
+/**
+ * The component list and the glossary are the longest things on the page and
+ * the least often read start to finish, so they are folded into a native
+ * `<details>`: scannable by default, complete when opened, and still findable
+ * with the browser's own find-in-page once expanded. `PageNav` opens them
+ * before it scrolls, so a nav click never lands on a closed lid.
+ */
+function CollapsibleSection({
+  id: sectionId,
+  title,
+  icon,
+  children,
+}: {
+  id: string;
+  title: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section id={sectionId} tabIndex={-1} className={SECTION_SHELL}>
+      <details className="group rounded-2xl border-2 border-zinc-200 bg-white/70 px-3 py-1.5">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 [&::-webkit-details-marker]:hidden">
+          <h2 className={cn("min-w-0 flex-1", SECTION_HEADING)}>
+            {icon}
+            {title}
+          </h2>
+          <span className="shrink-0 text-[11px] font-bold text-zinc-500 group-open:hidden">
+            {HOW_TO_LABELS.expand}
+          </span>
+          <ChevronDown
+            aria-hidden
+            className="h-4 w-4 shrink-0 text-zinc-400 transition-transform group-open:rotate-180 motion-reduce:transition-none"
+          />
+        </summary>
+        <div className="mt-2 mb-2 space-y-4">{children}</div>
+      </details>
+    </section>
+  );
+}
+
+/** The bullet list used by four sections, all of them fed from i18n. */
+function Bullets({ items }: { items: readonly string[] }) {
+  return (
+    <ul className="mt-2 space-y-1">
+      {items.map((b) => (
+        <li key={b} className="flex items-start gap-2 text-[13px] leading-snug">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-lava" />
+          {b}
+        </li>
+      ))}
+    </ul>
   );
 }
 

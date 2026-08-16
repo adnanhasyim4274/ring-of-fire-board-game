@@ -7,16 +7,20 @@ import { describe, expect, it } from "vitest";
 import { reduce } from "./reducer";
 import {
   checkGameOver,
+  escortRefusal,
   isSeaLaneOpen,
   moveCost,
+  openWaterOptions,
   resolveVerdict,
   rimNeighbors,
+  seaLaneCost,
   seaLaneNeighbors,
 } from "./rules";
 import type {
   EvidenceCategory,
   GameAction,
   GameState,
+  SectorId,
   TileState,
   Verdict,
   VillagerToken,
@@ -24,10 +28,14 @@ import type {
 import { evidenceCards, wildcardEvidenceId } from "@/data/evidenceCards";
 import { newsCardById } from "@/data/newsCards";
 import { scenarioById } from "@/data/scenarios";
+import { roleById } from "@/data/roles";
 
 // ——— Harness ————————————————————————————————————————————————————————
 
 const SCENARIO_ID = Object.keys(scenarioById)[0];
+/** Rim arithmetic is modulo the RING, never the tile count: the three Sea
+ *  Lane tiles live outside it. */
+const RING = scenarioById[SCENARIO_ID].ringSize;
 
 /** A disaster with no movement penalty, no escort block and no tile damage. */
 const CALM_DISASTER = "dis_atm_03";
@@ -116,7 +124,7 @@ function posSiagaIndex(state: GameState): number {
 /** A tile that holds villagers and sits on the rim next to a Pos Siaga. */
 function tileNextToPosSiaga(state: GameState): TileState {
   const pos = posSiagaIndex(state);
-  const neighbour = rimNeighbors(pos, state.tiles.length)
+  const neighbour = rimNeighbors(pos, RING)
     .map((i) => state.tiles[i])
     .find((t) => !t.isReadyPost && t.occupants.length > 0);
   expect(neighbour).toBeTruthy();
@@ -125,6 +133,48 @@ function tileNextToPosSiaga(state: GameState): TileState {
 
 function villagerCountOnBoard(state: GameState): number {
   return state.tiles.reduce((n, t) => n + t.occupants.length, 0);
+}
+
+/** The first News card that points at `sector`, so a test can aim the round. */
+function newsIdForSector(sector: SectorId): string {
+  const card = Object.values(newsCardById).find((c) => c.targetSectorId === sector);
+  if (!card) throw new Error(`no news card targets ${sector}`);
+  return card.id;
+}
+
+/** A land tile in `sector` that is next to a Ready Post and holds a calm villager. */
+function tileInSectorNextToPosSiaga(state: GameState, sector: SectorId): TileState {
+  const tile = state.tiles.find(
+    (t) =>
+      t.sectorId === sector &&
+      !t.hasCrisisToken &&
+      t.occupants.length > 0 &&
+      rimNeighbors(t.index, RING).some((i) => state.tiles[i]?.isReadyPost)
+  );
+  expect(tile).toBeTruthy();
+  return tile!;
+}
+
+function posSiagaNextTo(state: GameState, index: number): number {
+  const pos = rimNeighbors(index, RING).find((i) => state.tiles[i]?.isReadyPost);
+  expect(pos).toBeDefined();
+  return pos!;
+}
+
+/**
+ * Drop `player` onto `tile`, calm everyone on it, and hand them a full turn.
+ * Sub-mission tests care about what an action credits, not about the walk in.
+ */
+function stage(state: GameState, playerIndex: number, tileIndex: number): GameState {
+  const s = structuredClone(state);
+  s.currentPlayerIndex = playerIndex;
+  s.players[playerIndex].position = tileIndex;
+  s.tiles[tileIndex].occupants.forEach((v) => (v.status = "calm"));
+  return s;
+}
+
+function progressOf(state: GameState, playerIndex: number): number {
+  return state.players[playerIndex].subMissionProgress;
 }
 
 // ——— Setup ——————————————————————————————————————————————————————————
@@ -157,7 +207,7 @@ describe("START_GAME", () => {
     }
   });
 
-  it("uses one single difficulty — no presets", () => {
+  it("uses one single difficulty: no presets", () => {
     const s = newGame();
     expect(s.panicMeterMax).toBe(6);
     expect(s.decks.disaster).toHaveLength(12);
@@ -192,7 +242,7 @@ describe("sea routes", () => {
     const [to] = seaLaneNeighbors(from, scenario);
     expect(to).toBeDefined();
     // Not reachable along the rim — that is the whole point of the shortcut.
-    expect(rimNeighbors(from, s.tiles.length)).not.toContain(to);
+    expect(rimNeighbors(from, RING)).not.toContain(to);
 
     const cost = moveCost(s, from, to, s.players[0], true);
     const apBefore = s.players[0].ap;
@@ -238,7 +288,7 @@ function toVerdictPhase(newsId: string, locksToOpen: "both" | "one" | "none"): G
   return s;
 }
 
-describe("Commit & Flip — the three outcomes", () => {
+describe("Commit & Flip: the three outcomes", () => {
   const HOAX_NEWS = "news_soc_01"; // truth: hoax, locks HOW + WHEN
 
   it("verified: right verdict AND both locks -> +1 reputation, crisis cleared", () => {
@@ -526,7 +576,7 @@ describe("2-stage tile damage", () => {
   it("makes a Hancur tile impassable and a Retak tile cost more", () => {
     const s = toTurnsPhase(newGame());
     const player = s.players[0];
-    const [rimTarget] = rimNeighbors(player.position, s.tiles.length).filter(
+    const [rimTarget] = rimNeighbors(player.position, RING).filter(
       (i) => !s.tiles[i].isReadyPost
     );
 
@@ -708,7 +758,7 @@ describe("reputation economy", () => {
 // ——— Win / lose ————————————————————————————————————————————————————
 
 describe("game over", () => {
-  it("menang — reaching the evacuation target", () => {
+  it("menang: reaching the evacuation target", () => {
     let s = toTurnsPhase(newGame({}));
     const target = scenarioById[SCENARIO_ID].targetEvacuation;
     const pos = posSiagaIndex(s);
@@ -737,14 +787,14 @@ describe("game over", () => {
     expect(s.gameOverReason).toBe("win");
   });
 
-  it("panik — the panic meter maxes out", () => {
+  it("panik: the panic meter maxes out", () => {
     let s = toTurnsPhase(newGame());
     s = act(s, { type: "DEBUG_SET_PANIC", value: s.panicMeterMax });
     expect(s.phase).toBe("game_over");
     expect(s.gameOverReason).toBe("panic");
   });
 
-  it("korban — too few villagers left to ever reach the target", () => {
+  it("korban: too few villagers left to ever reach the target", () => {
     let s = toTurnsPhase(newGame({}));
     for (const tile of s.tiles) tile.occupants = [];
     s.evacuees = [];
@@ -753,7 +803,7 @@ describe("game over", () => {
     expect(s.gameOverReason).toBe("casualties");
   });
 
-  it("waktu — the disaster deck runs out before the target is met", () => {
+  it("waktu: the disaster deck runs out before the target is met", () => {
     let s = newGame({});
     s = act(s, { type: "DEBUG_SET_DISASTER_TOP", cardId: CALM_DISASTER });
     s = act(s, { type: "DEBUG_TRIM_DISASTER_DECK" });
@@ -800,6 +850,469 @@ describe("game over", () => {
     s = act(s, { type: "DEBUG_SET_PANIC", value: s.panicMeterMax });
     const frozen = act(s, { type: "ADVANCE_PHASE" });
     expect(frozen).toBe(s);
+  });
+});
+
+// ——— Sub-missions ——————————————————————————————————————————————————
+//
+// There was no coverage here at all, which is how two of the six shipped
+// permanently unreachable: the Sumatran Tiger's counted an escort the reducer
+// refuses two lines earlier, and the Whale Shark's needed villagers on a Sea
+// Lane tile that nothing could put them on. Every key gets a test now.
+
+describe("sub-missions: every key can actually be advanced", () => {
+  it("🐯 rescue_crisis counts villagers pulled out of the round's news sector", () => {
+    const newsId = newsIdForSector("sunda");
+    let s = toTurnsPhase(newGame({ roles: ["sumatran_tiger", "andean_llama"] }), { newsId });
+    expect(s.activeNews?.targetSectorId).toBe("sunda");
+
+    const tile = tileInSectorNextToPosSiaga(s, "sunda");
+    const pos = posSiagaNextTo(s, tile.index);
+    s = stage(s, 0, tile.index);
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+    expect(progressOf(s, 0)).toBe(0);
+
+    s = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: s.players[0].id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(s.evacuees).toHaveLength(1);
+    expect(progressOf(s, 0)).toBe(1);
+  });
+
+  it("🐯 rescue_crisis ignores a rescue out of any other sector", () => {
+    const newsId = newsIdForSector("sunda");
+    let s = toTurnsPhase(newGame({ roles: ["sumatran_tiger", "andean_llama"] }), { newsId });
+    const tile = tileInSectorNextToPosSiaga(s, "cascadia");
+    const pos = posSiagaNextTo(s, tile.index);
+    s = stage(s, 0, tile.index);
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+
+    s = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: s.players[0].id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(s.evacuees).toHaveLength(1);
+    expect(progressOf(s, 0)).toBe(0);
+  });
+
+  it("🐯 the old reading was unreachable: a Crisis Token refuses the escort outright", () => {
+    // The guard this whole redefinition exists to preserve. If it ever stops
+    // holding, the media-literacy mechanic becomes optional.
+    const newsId = newsIdForSector("sunda");
+    let s = toTurnsPhase(newGame({ roles: ["sumatran_tiger", "andean_llama"] }), { newsId });
+    const tile = tileInSectorNextToPosSiaga(s, "sunda");
+    const pos = posSiagaNextTo(s, tile.index);
+    s = stage(s, 0, tile.index);
+    s.tiles[tile.index].hasCrisisToken = true;
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+
+    const after = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: s.players[0].id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(after.evacuees).toHaveLength(0);
+    expect(progressOf(after, 0)).toBe(0);
+    expect(after.tiles[tile.index].occupants.map((v) => v.id)).toContain(villagerId);
+  });
+
+  it("🦅 critical_mapping counts each damaged tile once, not each visit", () => {
+    let s = toTurnsPhase(newGame({ roles: ["bald_eagle", "andean_llama"] }));
+    const damaged = s.tiles.find((t) => !t.isReadyPost && !t.isSeaLane)!.index;
+    s = stage(s, 0, damaged);
+    s.tiles[damaged].damage = 1;
+
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(progressOf(s, 0)).toBe(1);
+
+    // Round the table and stand on the very same tile again.
+    s = act(s, { type: "END_PLAYER_TURN" });
+    s = act(s, { type: "DEBUG_SET_PHASE", phase: "p3_turns" });
+    s = stage(s, 0, damaged);
+    s = act(s, { type: "END_PLAYER_TURN" });
+    expect(progressOf(s, 0)).toBe(1);
+  });
+
+  it("🐒 collect_3pt snapshots three 3-point cards held at once", () => {
+    let s = toTurnsPhase(newGame({ roles: ["japanese_macaque", "andean_llama"] }));
+    const threePointer = evidenceCards.find((c) => c.points === 3)!.id;
+    s.players[0].hand = [threePointer, threePointer, threePointer];
+    s = act(s, { type: "INVESTIGATE", playerId: s.players[0].id });
+    expect(progressOf(s, 0)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("🦙 calm_six counts one per calm, and three at once for Calm the Crowd", () => {
+    let s = toTurnsPhase(newGame({ roles: ["andean_llama", "bald_eagle"] }));
+    const tile = tileNextToPosSiaga(s);
+    s = stage(s, 0, tile.index);
+    for (let i = 0; i < 4; i++) {
+      s.tiles[tile.index].occupants.push({
+        id: `panic-${i}`,
+        status: "panicked",
+        tileIndex: tile.index,
+      });
+    }
+    s = act(s, {
+      type: "CALM_VILLAGER",
+      playerId: s.players[0].id,
+      villagerId: "panic-0",
+    });
+    expect(progressOf(s, 0)).toBe(1);
+
+    s = act(s, { type: "USE_ACTIVE_ABILITY", playerId: s.players[0].id });
+    expect(progressOf(s, 0)).toBe(4); // 1 + the 3 the ability settles
+  });
+
+  it("🦜 catalyst counts a bartered card that cracks the news the same round", () => {
+    const newsId = "news_soc_01";
+    // Pin the Disaster too: an unpinned draw can land on a block_trade round,
+    // which refuses the barter this test is about.
+    let s = toTurnsPhase(newGame({ roles: ["kea_parrot", "andean_llama"] }), {
+      newsId,
+      disasterId: "dis_tec_01",
+    });
+    const lock = s.activeNews!.locks[0];
+    const key = evidenceIdFor(lock);
+    const spare = evidenceIdFor(s.activeNews!.locks[1]);
+    s.players[0].hand = [spare];
+    s.players[1].hand = [key];
+    // BARTER is refused unless the barterer is the Guardian whose turn it is.
+    s.currentPlayerIndex = 0;
+
+    s = act(s, {
+      type: "BARTER",
+      playerId: s.players[0].id,
+      withPlayerId: s.players[1].id,
+      giveCardId: spare,
+      takeCardId: key,
+    });
+    expect(s.players[0].hand).toContain(key);
+
+    s = act(s, {
+      type: "PLAY_EVIDENCE_LOCK",
+      playerId: s.players[0].id,
+      evidenceId: key,
+      lock,
+    });
+    expect(s.locksOpened).toContain(lock);
+    expect(progressOf(s, 0)).toBe(1);
+  });
+
+  it("pays +2 Reputation in Phase 5, exactly once", () => {
+    const newsId = newsIdForSector("sunda");
+    let s = toTurnsPhase(newGame({ roles: ["sumatran_tiger", "andean_llama"] }), { newsId });
+    const target = roleById.sumatran_tiger.subMissionTarget;
+    const tile = tileInSectorNextToPosSiaga(s, "sunda");
+    const pos = posSiagaNextTo(s, tile.index);
+    s = stage(s, 0, tile.index);
+    s.players[0].subMissionProgress = target - 1;
+    const villagerId = s.tiles[tile.index].occupants[0].id;
+
+    s = act(s, {
+      type: "ESCORT_VILLAGER",
+      playerId: s.players[0].id,
+      villagerIds: [villagerId],
+      targetTileIndex: pos,
+    });
+    expect(progressOf(s, 0)).toBe(target);
+    expect(s.players[0].subMissionDone).toBe(false); // awarded in Phase 5, not on the spot
+
+    const reputationBefore = s.reputation;
+    s = endAllTurns(s);
+    s = act(s, { type: "COMMIT_VERDICT", verdict: "abstain" });
+    s = act(s, { type: "FLIP_NEWS" });
+    s = act(s, { type: "ADVANCE_PHASE" });
+    expect(s.phase).toBe("p5_impact");
+    expect(s.players[0].subMissionDone).toBe(true);
+    expect(s.reputation).toBe(reputationBefore + 2);
+    expect(s.stats.subMissionsDone).toBe(1);
+
+    // A second Phase 5 must not pay for the same Sub-Mission again.
+    const repAfter = s.reputation;
+    s = act(s, { type: "ADVANCE_PHASE" });
+    s = playRound(s, { newsId, verdict: "abstain" });
+    expect(s.stats.subMissionsDone).toBe(1);
+    expect(s.reputation).toBeLessThanOrEqual(repAfter + 1); // +1 verification at most
+  });
+});
+
+// ——— 🐋 Whale Shark ————————————————————————————————————————————————
+
+describe("Whale Shark: Open Water and Deep Current", () => {
+  it("passive: the Navigator crosses for 1 AP where everyone else pays 2", () => {
+    const s = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const navigator = s.players[0];
+    const other = s.players[1];
+    expect(seaLaneCost(s, navigator)).toBe(1);
+    expect(seaLaneCost(s, other)).toBe(2);
+    expect(seaLaneCost(s)).toBe(2);
+
+    const from = navigator.position;
+    const [to] = seaLaneNeighbors(from, scenarioById[SCENARIO_ID]);
+    expect(moveCost(s, from, to, navigator, true)).toBe(1);
+    expect(moveCost(s, from, to, other, true)).toBe(2);
+
+    const apBefore = navigator.ap;
+    const after = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: navigator.id,
+      targetTileIndex: to,
+      viaSeaLane: true,
+    });
+    expect(after.players[0].position).toBe(to);
+    expect(after.players[0].ap).toBe(apBefore - 1);
+  });
+
+  it("Deep Current is the only way a villager ever reaches a Sea Lane tile", () => {
+    let s = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const scenario = scenarioById[SCENARIO_ID];
+    // Nothing starts in the water, and no ordinary action can put anyone there.
+    for (const i of scenario.seaLaneIndices) expect(s.tiles[i].occupants).toHaveLength(0);
+
+    const mouth = s.players[0].position;
+    const lane = seaLaneNeighbors(mouth, scenario).find((i) => scenario.seaLaneIndices.includes(i))!;
+    const source = rimNeighbors(mouth, RING).find(
+      (i) => s.tiles[i].occupants.length > 0
+    )!;
+    s.tiles[source].occupants.forEach((v) => (v.status = "calm"));
+    const villagerId = s.tiles[source].occupants[0].id;
+
+    const options = openWaterOptions(s, s.players[0]);
+    expect(options.some((o) => o.villagerId === villagerId && o.toIndex === lane)).toBe(true);
+
+    const apBefore = s.players[0].ap;
+    s = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      villagerId,
+      targetTileIndex: lane,
+    });
+    expect(s.tiles[lane].occupants.map((v) => v.id)).toContain(villagerId);
+    expect(s.tiles[source].occupants.map((v) => v.id)).not.toContain(villagerId);
+    expect(s.players[0].ap).toBe(apBefore); // 0 AP
+    expect(s.players[0].activeUsedThisRound).toBe(true);
+  });
+
+  it("carries that villager across the lane and credits safe_passage on arrival", () => {
+    let s = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const scenario = scenarioById[SCENARIO_ID];
+    const mouth = s.players[0].position;
+    const chain = [mouth, ...scenario.seaLaneIndices];
+    const farMouth = scenario.seaLaneEndpoints.find((i) => i !== mouth)!;
+    const source = rimNeighbors(mouth, RING).find(
+      (i) => s.tiles[i].occupants.length > 0
+    )!;
+    s.tiles[source].occupants.forEach((v) => (v.status = "calm"));
+    const villagerId = s.tiles[source].occupants[0].id;
+
+    s = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      villagerId,
+      targetTileIndex: chain[1],
+    });
+    // Swim out to meet them, then walk them the length of the lane. 1 AP a hop
+    // for the Navigator, so the whole crossing fits inside one turn's 4 AP.
+    s = act(s, {
+      type: "MOVE_PLAYER",
+      playerId: s.players[0].id,
+      targetTileIndex: chain[1],
+      viaSeaLane: true,
+    });
+    const hops = [...scenario.seaLaneIndices.slice(1), farMouth];
+    for (const next of hops) {
+      s = act(s, {
+        type: "ESCORT_VILLAGER",
+        playerId: s.players[0].id,
+        villagerIds: [villagerId],
+        targetTileIndex: next,
+        viaSeaLane: true,
+      });
+    }
+    expect(s.players[0].position).toBe(farMouth);
+    expect(s.evacuees.map((v) => v.id)).toContain(villagerId);
+    expect(progressOf(s, 0)).toBe(1);
+    expect(s.players[0].ap).toBeGreaterThanOrEqual(0);
+  });
+
+  it("delivers straight to the far Ready Post from the last lane tile", () => {
+    let s = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const scenario = scenarioById[SCENARIO_ID];
+    const last = scenario.seaLaneIndices[scenario.seaLaneIndices.length - 1];
+    const farMouth = seaLaneNeighbors(last, scenario).find((i) => s.tiles[i].isReadyPost)!;
+    s = stage(s, 0, last);
+    s.tiles[last].occupants.push({ id: "swimmer", status: "calm", tileIndex: last });
+
+    const option = openWaterOptions(s, s.players[0]).find(
+      (o) => o.villagerId === "swimmer" && o.toIndex === farMouth
+    );
+    expect(option?.rescues).toBe(true);
+
+    s = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      villagerId: "swimmer",
+      targetTileIndex: farMouth,
+    });
+    expect(s.evacuees.map((v) => v.id)).toContain("swimmer");
+    expect(progressOf(s, 0)).toBe(1);
+  });
+
+  it("refuses a Crisis Token tile, exactly like an ordinary escort", () => {
+    const s = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const mouth = s.players[0].position;
+    const source = rimNeighbors(mouth, RING).find(
+      (i) => s.tiles[i].occupants.length > 0
+    )!;
+    s.tiles[source].occupants.forEach((v) => (v.status = "calm"));
+    const villagerId = s.tiles[source].occupants[0].id;
+    s.tiles[source].hasCrisisToken = true;
+
+    expect(openWaterOptions(s, s.players[0]).some((o) => o.villagerId === villagerId)).toBe(
+      false
+    );
+    const after = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      villagerId,
+      targetTileIndex: seaLaneNeighbors(mouth, scenarioById[SCENARIO_ID])[0],
+    });
+    expect(after.tiles[source].occupants.map((v) => v.id)).toContain(villagerId);
+    // A refusal must not burn the once-per-round ability either.
+    expect(after.players[0].activeUsedThisRound).toBe(false);
+  });
+
+  it("refuses panicked villagers and a lane closed by an oceanic disaster", () => {
+    const calm = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }));
+    const mouth = calm.players[0].position;
+    rimNeighbors(mouth, RING).forEach((i) =>
+      calm.tiles[i].occupants.forEach((v) => (v.status = "panicked"))
+    );
+    expect(openWaterOptions(calm, calm.players[0])).toHaveLength(0);
+
+    const stormy = toTurnsPhase(newGame({ roles: ["whale_shark", "bald_eagle"] }), {
+      disasterId: "dis_oce_01",
+    });
+    expect(isSeaLaneOpen(stormy)).toBe(false);
+    stormy.tiles.forEach((t) => t.occupants.forEach((v) => (v.status = "calm")));
+    expect(openWaterOptions(stormy, stormy.players[0])).toHaveLength(0);
+  });
+
+  it("offers nothing to a Guardian who is not the Navigator", () => {
+    const s = toTurnsPhase(newGame({ roles: ["bald_eagle", "andean_llama"] }));
+    expect(openWaterOptions(s, s.players[0])).toHaveLength(0);
+  });
+});
+
+// ——— 🦜 Network Sync ————————————————————————————————————————————————
+
+describe("Kea Parrot: Network Sync", () => {
+  it("swaps the two named cards, not just a look at the hand", () => {
+    let s = toTurnsPhase(newGame({ roles: ["kea_parrot", "andean_llama"] }));
+    const mine = evidenceIdFor("WHO");
+    const theirs = evidenceIdFor("WHY");
+    s.players[0].hand = [mine];
+    s.players[1].hand = [theirs];
+
+    s = act(s, {
+      type: "USE_ACTIVE_ABILITY",
+      playerId: s.players[0].id,
+      targetPlayerId: s.players[1].id,
+      evidenceIds: [mine, theirs],
+    });
+    expect(s.players[0].hand).toEqual([theirs]);
+    expect(s.players[1].hand).toEqual([mine]);
+    expect(s.peek).toEqual({ kind: "hand", playerId: s.players[1].id });
+    expect(s.players[0].activeUsedThisRound).toBe(true);
+  });
+});
+
+// ——— Escort refusals ————————————————————————————————————————————————
+
+describe("escort refusals carry a reason", () => {
+  it("names the Crisis Token first, then the news lock, then the disaster", () => {
+    const s = toTurnsPhase(newGame(), { disasterId: "dis_tec_03" });
+    const from = s.tiles.find((t) => !t.isReadyPost && !t.isSeaLane)!;
+    const to = s.tiles[rimNeighbors(from.index, RING)[0]];
+    expect(escortRefusal(s, from, to)).toBeNull();
+
+    const locked = structuredClone(s);
+    locked.tiles[from.index].evacuationLocked = true;
+    expect(escortRefusal(locked, locked.tiles[from.index], locked.tiles[to.index])).toBe(
+      "evacuation_locked"
+    );
+
+    const crisis = structuredClone(locked);
+    crisis.tiles[from.index].hasCrisisToken = true;
+    expect(escortRefusal(crisis, crisis.tiles[from.index], crisis.tiles[to.index])).toBe(
+      "crisis_token"
+    );
+  });
+
+  it("reports block_escort for a sector the disaster has cut off", () => {
+    const s = toTurnsPhase(newGame(), { disasterId: "dis_atm_01" });
+    if (s.activeDisaster?.roundEffectKey !== "block_escort") return;
+    const sectors = s.activeDisaster.affectedSectorIds;
+    const from = s.tiles.find(
+      (t) => t.sectorId !== null && (sectors.length === 0 || sectors.includes(t.sectorId))
+    )!;
+    const to = s.tiles[rimNeighbors(from.index, RING)[0]];
+    expect(escortRefusal(s, from, to)).toBe("block_escort");
+  });
+});
+
+// ——— Reward duplicates ————————————————————————————————————————————————
+
+describe("Reward shop: no dead purchases", () => {
+  /** Every effect key is printed on two cards; only one of each can do anything. */
+  function toShop(): GameState {
+    let s = playRound(newGame({}), { newsId: TEAL_NEWS, verdict: "fact" });
+    expect(s.phase).toBe("p5_impact");
+    s = act(s, { type: "DEBUG_SET_REPUTATION", value: 15 });
+    return s;
+  }
+
+  it("refuses a second card carrying the same standing bonus, and keeps the Reputation", () => {
+    let s = toShop();
+    s = act(s, { type: "BUY_REWARD", rewardId: "rew_peta_evakuasi" }); // sea_lane_cheap, 2
+    expect(s.ownedRewards).toContain("rew_peta_evakuasi");
+    const repAfterFirst = s.reputation;
+
+    // rew_dermaga_darurat carries the identical effect for 3 more Reputation.
+    s = act(s, { type: "BUY_REWARD", rewardId: "rew_dermaga_darurat" });
+    expect(s.ownedRewards).not.toContain("rew_dermaga_darurat");
+    expect(s.reputation).toBe(repAfterFirst);
+  });
+
+  it("covers all four duplicated standing bonuses", () => {
+    const pairs: [string, string][] = [
+      ["rew_peta_evakuasi", "rew_dermaga_darurat"],       // sea_lane_cheap
+      ["rew_pengeras_suara_desa", "rew_sekolah_siaga"],   // calm_cheap
+      ["rew_radio_komunitas", "rew_drone_pemantau"],      // ap_up
+      ["rew_pusat_data_warga", "rew_jaringan_relawan"],   // hand_limit_up
+    ];
+    for (const [first, second] of pairs) {
+      let s = toShop();
+      s = act(s, { type: "BUY_REWARD", rewardId: first });
+      const rep = s.reputation;
+      s = act(s, { type: "BUY_REWARD", rewardId: second });
+      expect(s.ownedRewards, `${second} after ${first}`).not.toContain(second);
+      expect(s.reputation, `${second} after ${first}`).toBe(rep);
+    }
+  });
+
+  it("still allows a second clear_chaos, because that one is a one-shot", () => {
+    let s = toShop();
+    s = act(s, { type: "BUY_REWARD", rewardId: "rew_kampanye_klarifikasi" });
+    s = act(s, { type: "BUY_REWARD", rewardId: "rew_klinik_lapangan" });
+    expect(s.ownedRewards).toContain("rew_kampanye_klarifikasi");
+    expect(s.ownedRewards).toContain("rew_klinik_lapangan");
   });
 });
 

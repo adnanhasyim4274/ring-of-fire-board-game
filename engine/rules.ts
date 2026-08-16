@@ -44,12 +44,16 @@ export const HAND_LIMIT_SCHOLAR = cfg("handLimitScholar", 6);
 export const MOVE_COST = cfg("moveCost", 1);
 export const RETAK_MOVE_COST = cfg("moveCostCracked", 2);
 export const SEA_LANE_COST = cfg("seaLaneCost", 2);
+/** 🐋 Whale Shark — "Open Water": the Navigator's own price for a crossing. */
+export const SEA_LANE_COST_NAVIGATOR = cfg("seaLaneCostNavigator", 1);
 export const ESCORT_COST = cfg("escortCost", 1);
 export const CALM_COST = cfg("calmCost", 2);
 export const CALM_COST_STORM = cfg("calmCostStorm", 3);
 export const INVESTIGATE_COST = cfg("investigateCost", 1);
 export const BARTER_COST = cfg("barterCost", 1);
 export const SUB_MISSION_REPUTATION = cfg("reputationPerSubMission", 2);
+/** The track is drawn with a maximum, so the value has to respect it. */
+export const REPUTATION_MAX = cfg("reputationTrackMax", 15);
 
 // v3 has exactly ONE difficulty — no presets, no picker. The numbers live in
 // data/gameConfig.ts and are tuned in engine/balance.test.ts.
@@ -115,6 +119,11 @@ export function hasAbility(player: Player, key: ActiveAbilityKey): boolean {
 /** 🦅 Elang — Navigasi Udara: immune to disaster movement penalties and Retak surcharges. */
 export function isAirborne(player?: Player): boolean {
   return !!player && hasAbility(player, "recon");
+}
+
+/** 🐋 Whale Shark — Open Water: the Sea Lane is home water, so it is cheaper. */
+export function isNavigator(player?: Player): boolean {
+  return !!player && hasAbility(player, "open_water");
 }
 
 // ——— Ring topology ——————————————————————————————————————————————————
@@ -284,8 +293,16 @@ export function handLimit(state: GameState, player: Player): number {
   return Math.max(1, limit);
 }
 
-/** AP for one Sea Route hop — 2, or 1 once the team owns "Peta Evakuasi". */
-export function seaLaneCost(state: GameState): number {
+/**
+ * AP for one Sea Route hop.
+ *
+ * 2 by default; 1 once the team owns "Evacuation Chart", and 1 for the Whale
+ * Shark whether the team owns it or not — "Open Water" is the Navigator's
+ * passive, so it has to be priced here rather than promised on the role card.
+ * The two never stack: the floor is one crossing, one AP.
+ */
+export function seaLaneCost(state: GameState, player?: Player): number {
+  if (isNavigator(player)) return SEA_LANE_COST_NAVIGATOR;
   return hasReward(state, "sea_lane_cheap") ? 1 : SEA_LANE_COST;
 }
 
@@ -315,7 +332,7 @@ export function moveCost(
   player?: Player,
   viaSeaLane = false
 ): number {
-  const base = viaSeaLane ? seaLaneCost(state) : MOVE_COST;
+  const base = viaSeaLane ? seaLaneCost(state, player) : MOVE_COST;
   let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaLane);
   // "Jalur Alternatif" cancels one terrain/weather penalty.
   if (player?.altRouteReady && extra > 0) extra = 0;
@@ -330,7 +347,7 @@ export function escortCost(
   player?: Player,
   viaSeaLane = false
 ): number {
-  const base = viaSeaLane ? seaLaneCost(state) : ESCORT_COST;
+  const base = viaSeaLane ? seaLaneCost(state, player) : ESCORT_COST;
   let extra = terrainAndWeather(state, fromIndex, toIndex, player, viaSeaLane);
   if (player?.altRouteReady && extra > 0) extra = 0;
   return Math.max(0, base + extra);
@@ -344,17 +361,142 @@ export function calmCost(state: GameState): number {
   return Math.max(1, cost);
 }
 
+/**
+ * WHY an escort would be refused, not just whether.
+ *
+ * The reducer used to answer this in three scattered places and the UI could
+ * only see one of them, so a player tapping Escort on a Crisis Token tile got
+ * silence. One function, one order of precedence, both lanes read it.
+ *
+ * `crisis_token` comes first on purpose: it is the teaching mechanic, and if a
+ * tile is both rumour-locked and disaster-locked, the rumour is the one the
+ * table can actually do something about.
+ */
+export type EscortRefusal = "crisis_token" | "evacuation_locked" | "block_escort";
+
+/** Reasons that depend only on the tile the villagers are standing on. */
+export function escortRefusalFromTile(
+  state: GameState,
+  from: TileState
+): EscortRefusal | null {
+  // Never relax this one. An unverified rumour keeps the crowd where it is,
+  // and calming them one by one is not a way around it — only a successful
+  // verification or the Andean Llama's Active ability lifts the token.
+  if (from.hasCrisisToken) return "crisis_token";
+  if (from.evacuationLocked) return "evacuation_locked";
+  if (
+    state.activeDisaster?.roundEffectKey === "block_escort" &&
+    isSectorAffected(state, from.sectorId)
+  ) {
+    return "block_escort";
+  }
+  return null;
+}
+
+/** The full check, destination included. */
+export function escortRefusal(
+  state: GameState,
+  from: TileState,
+  to: TileState
+): EscortRefusal | null {
+  const source = escortRefusalFromTile(state, from);
+  if (source) return source;
+  if (
+    state.activeDisaster?.roundEffectKey === "block_escort" &&
+    isSectorAffected(state, to.sectorId)
+  ) {
+    return "block_escort";
+  }
+  return null;
+}
+
 /** Escort is blocked in/out of a sector the active disaster has cut off. */
 export function escortBlocked(state: GameState, from: TileState, to: TileState): boolean {
-  if (from.evacuationLocked) return true;
-  if (state.activeDisaster?.roundEffectKey !== "block_escort") return false;
-  return isSectorAffected(state, from.sectorId) || isSectorAffected(state, to.sectorId);
+  return escortRefusal(state, from, to) !== null;
 }
 
 /** How many villagers one escort action may take. */
 export function maxEscortGroup(player: Player | undefined, viaSeaLane: boolean): number {
   if (viaSeaLane) return 1; // Rute Laut: maks 1 warga, always
   return player && hasAbility(player, "tactical_escort") ? 2 : 1;
+}
+
+// ——— 🐋 Deep Current ————————————————————————————————————————————————————
+
+/**
+ * One legal Deep Current placement.
+ *
+ * The Sea Lane touches nothing but the two Ready Posts at its mouths, and a
+ * villager who reaches a Ready Post is rescued on the spot. Without this
+ * ability there is therefore no sequence of legal actions that puts a villager
+ * on a Sea Lane tile at all — which left both the Whale Shark's Active and its
+ * "Safe Passage" Sub-Mission unreachable. This is the staging step.
+ */
+export interface OpenWaterOption {
+  villagerId: string;
+  fromIndex: number;
+  toIndex: number;
+  /** The villager lands on a Ready Post and is rescued by this single step. */
+  rescues: boolean;
+}
+
+/** The Sea Lane tile this Ready Post opens onto, if it is one of the mouths. */
+function laneMouthFrom(scenario: Scenario, index: number): number | undefined {
+  const [a, b] = scenario?.seaLaneEndpoints ?? [-1, -1];
+  if (index !== a && index !== b) return undefined;
+  return seaLaneNeighbors(index, scenario).find((n) => isSeaLaneTile(scenario, n));
+}
+
+/**
+ * Every villager the Whale Shark could move with "Deep Current" right now.
+ *
+ * Two modes, matching the two clauses on the role card:
+ *   • standing at a mouth of the lane — lift a calm villager off a neighbouring
+ *     rim tile and set them down in the water;
+ *   • standing in the water — walk a calm villager on your own tile one hex
+ *     along the lane, which at the far mouth means all the way to safety.
+ *
+ * Every refusal that applies to an ordinary escort applies here too, Crisis
+ * Token first. The ability is a shortcut through the ocean, never a way around
+ * an unverified rumour.
+ */
+export function openWaterOptions(state: GameState, player: Player): OpenWaterOption[] {
+  const out: OpenWaterOption[] = [];
+  if (!hasAbility(player, "open_water")) return out;
+  if (!isSeaLaneOpen(state)) return out;
+
+  const scenario = getScenario(state);
+  const here = state.tiles[player.position];
+  if (!here) return out;
+
+  const offer = (from: TileState, villager: VillagerToken, toIndex: number) => {
+    const to = state.tiles[toIndex];
+    if (!to || !isPassable(to)) return;
+    if (villager.status !== "calm") return;
+    if (escortRefusal(state, from, to)) return;
+    out.push({
+      villagerId: villager.id,
+      fromIndex: from.index,
+      toIndex,
+      rescues: to.isReadyPost,
+    });
+  };
+
+  if (isSeaLaneTile(scenario, player.position)) {
+    for (const villager of here.occupants) {
+      for (const n of seaLaneNeighbors(player.position, scenario)) offer(here, villager, n);
+    }
+    return out;
+  }
+
+  const mouth = laneMouthFrom(scenario, player.position);
+  if (mouth === undefined) return out;
+  for (const n of rimNeighbors(player.position, ringSize(state))) {
+    const source = state.tiles[n];
+    if (!source) continue;
+    for (const villager of source.occupants) offer(source, villager, mouth);
+  }
+  return out;
 }
 
 // ——— Pathing ——————————————————————————————————————————————————————————

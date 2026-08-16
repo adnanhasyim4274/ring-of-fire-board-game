@@ -10,6 +10,7 @@ import type {
   GameState,
   NewsEffect,
   Player,
+  RewardCard,
   Scenario,
   SectorId,
   SubMissionKey,
@@ -23,13 +24,14 @@ import { newsCardById } from "@/data/newsCards";
 import { evidenceCardById, buildEvidenceDeck } from "@/data/evidenceCards";
 import { disasterCardById, buildDisasterDeck } from "@/data/disasterCards";
 import { chaosCardById } from "@/data/chaosCards";
-import { rewardCardById } from "@/data/rewardCards";
+import { rewardCardById, isRewardEffectCovered } from "@/data/rewardCards";
 import {
   BARTER_COST,
   DISASTER_DECK_SIZE,
   INVESTIGATE_COST,
   PANIC_METER_MAX,
   STARTING_HAND,
+  REPUTATION_MAX,
   SUB_MISSION_REPUTATION,
   allNeighbors,
   applyChaos,
@@ -37,8 +39,8 @@ import {
   areSeaLaneLinked,
   calmCost,
   checkGameOver,
-  escortBlocked,
   escortCost,
+  escortRefusal,
   handLimit,
   hasAbility,
   hasChaos,
@@ -50,6 +52,7 @@ import {
   mulberry32,
   nearestPanickedVillager,
   nearestSafeStep,
+  openWaterOptions,
   resolveVerdict,
   roleOf,
   sectorTiles,
@@ -57,6 +60,19 @@ import {
   startingAp,
   stepTowardNearestReadyPost,
 } from "./rules";
+import type { EscortRefusal } from "./rules";
+
+/** One sentence per refusal, so the log and the board never disagree. */
+const ESCORT_REFUSAL_LOG: Record<EscortRefusal, string> = {
+  // An unresolved rumour locks evacuation: the crowd is too loud to be led.
+  // Calming them one at a time is not enough — a Crisis Token only lifts on a
+  // successful verification or the Andean Llama's Active ability. This is what
+  // makes the media-literacy mechanic decisive rather than decorative.
+  crisis_token:
+    "They refuse to be led: the story on this tile is still unproven. Settle the story first!",
+  evacuation_locked: "Evacuation out of this tile is locked this round.",
+  block_escort: "The disaster has cut this sector off: no escort in or out this round.",
+};
 
 // ——— Loose data views (the data lane owns these modules) ————————————————
 const scenarioMap = scenarioById as unknown as Record<string, Scenario | undefined>;
@@ -64,10 +80,7 @@ const newsMap = newsCardById as unknown as Record<string, GameState["activeNews"
 const disasterMap = disasterCardById as unknown as Record<string, GameState["activeDisaster"]>;
 const evidenceMap = evidenceCardById as unknown as Record<string, EvidenceCard | undefined>;
 const chaosMap = chaosCardById as unknown as Record<string, ChaosCard | undefined>;
-const rewardMap = rewardCardById as unknown as Record<
-  string,
-  { id: string; cost: number; title: string; effectKey: string } | undefined
->;
+const rewardMap = rewardCardById as unknown as Record<string, RewardCard | undefined>;
 
 // ——— Small utilities ——————————————————————————————————————————————————
 
@@ -183,7 +196,7 @@ function damageTile(s: GameState, index: number) {
   if (!tile || tile.isReadyPost || tile.damage >= 2) return;
   tile.damage = (tile.damage + 1) as TileDamage;
   if (tile.damage === 1) {
-    log(s, `Tile ${index} is CRACKED — entering it now costs more.`);
+    log(s, `Tile ${index} is CRACKED: entering it now costs more.`);
     return;
   }
   const lost = [...tile.occupants];
@@ -196,8 +209,8 @@ function damageTile(s: GameState, index: number) {
   log(
     s,
     lost.length > 0
-      ? `Tile ${index} is DESTROYED — ${lost.length} lost!`
-      : `Tile ${index} is DESTROYED — thankfully nobody was on it.`
+      ? `Tile ${index} is DESTROYED: ${lost.length} lost!`
+      : `Tile ${index} is DESTROYED: thankfully nobody was on it.`
   );
   for (const p of s.players) {
     if (p.position !== index) continue;
@@ -229,7 +242,7 @@ function driftVillagers(s: GameState, count: number) {
       target.occupants.push(villager);
     }
   }
-  log(s, "Panic Exodus — villagers scatter with no direction.");
+  log(s, "Panic Exodus: villagers scatter with no direction.");
 }
 
 // ——— Sub-missions ——————————————————————————————————————————————————————
@@ -262,9 +275,9 @@ function awardSubMissions(s: GameState) {
     const target = role.subMissionTarget ?? 3;
     if (p.subMissionProgress < target) continue;
     p.subMissionDone = true;
-    s.reputation += SUB_MISSION_REPUTATION;
+    s.reputation = Math.min(REPUTATION_MAX, s.reputation + SUB_MISSION_REPUTATION);
     s.stats.subMissionsDone += 1;
-    log(s, `Sub-Mission "${role.subMissionName}" complete — +${SUB_MISSION_REPUTATION} Reputation!`);
+    log(s, `Sub-Mission "${role.subMissionName}" complete: +${SUB_MISSION_REPUTATION} Reputation!`);
   }
 }
 
@@ -351,7 +364,7 @@ function enterTurnsPhase(s: GameState) {
   s.pendingApBonus = {};
   s.playersEndedTurn = [];
   s.currentPlayerIndex = s.firstPlayerIndex;
-  log(s, "Phase 3 — Guardian Turns. Spend your Action Points!");
+  log(s, "Phase 3: Guardian Turns. Spend your Action Points!");
 }
 
 function enterVerdictPhase(s: GameState) {
@@ -359,7 +372,7 @@ function enterVerdictPhase(s: GameState) {
   // "Evacuation locked" lasts exactly one round; it expires here, before a new
   // Fase 4 can set it again.
   for (const t of s.tiles) t.evacuationLocked = false;
-  log(s, "Phase 4 — The Verdict. Open the locks, commit, then flip the card.");
+  log(s, "Phase 4: The Verdict. Open the locks, commit, then flip the card.");
 }
 
 /** Commit & Flip resolution — the heart of the game. */
@@ -372,32 +385,32 @@ function resolveFlip(s: GameState) {
   const tile = s.newsTileIndex !== null ? s.tiles[s.newsTileIndex] : null;
 
   if (outcome === "verified") {
-    s.reputation += 1;
+    s.reputation = Math.min(REPUTATION_MAX, s.reputation + 1);
     s.stats.verified += 1;
     if (news.truth === "hoax") s.stats.hoaxDebunked += 1;
     else s.stats.factsValidated += 1;
     if (tile) tile.hasCrisisToken = false;
-    log(s, `VERIFIED — "${news.title}" was ${news.truth.toUpperCase()}. +1 Reputation.`);
+    log(s, `VERIFIED: "${news.title}" was ${news.truth.toUpperCase()}. +1 Reputation.`);
     applyNewsEffect(s, news.ifValidated);
   } else if (outcome === "lucky_guess") {
     s.stats.luckyGuess += 1;
     log(
       s,
-      `LUCKY GUESS — your verdict was right, but the locks were not both open. ` +
+      `LUCKY GUESS: your verdict was right, but the locks were not both open. ` +
         `No Reputation, and the Crisis Token stays on the board.`
     );
   } else {
     s.stats.rumourSpreads += 1;
     if (s.panicShield) {
-      log(s, "RUMOUR SPREADS — but Mental Fortitude holds the Panic Meter this round.");
+      log(s, "RUMOUR SPREADS, but Mental Fortitude holds the Panic Meter this round.");
     } else {
       s.panicMeter += 1;
-      log(s, `RUMOUR SPREADS — the Panic Meter climbs to ${s.panicMeter}.`);
+      log(s, `RUMOUR SPREADS: the Panic Meter climbs to ${s.panicMeter}.`);
     }
     const chaosId = drawChaosId(s);
     if (chaosId) {
       const card = applyChaos(s, chaosId);
-      if (card) log(s, `Chaos card: "${card.title}" — ${card.description}`);
+      if (card) log(s, `Chaos card: "${card.title}", ${card.description}`);
     }
     applyNewsEffect(s, news.ifIgnored);
   }
@@ -420,7 +433,7 @@ function applyDisasterDamage(s: GameState) {
       if (t && !targets.includes(t.index)) targets.push(t.index);
     }
   }
-  if (targets.length > 0) log(s, `Konsekuensi Akhir: ${d.endEffect}`);
+  if (targets.length > 0) log(s, `Final consequence: ${d.endEffect}`);
   for (const i of targets) damageTile(s, i);
 }
 
@@ -434,7 +447,7 @@ function enterImpactPhase(s: GameState) {
   if (s.phase === "game_over") return;
 
   s.phase = "p5_impact";
-  log(s, "Phase 5 — Impact & Escalation.");
+  log(s, "Phase 5: Impact & Escalation.");
   applyDisasterDamage(s);
   if (hasChaos(s, "villager_drift")) driftVillagers(s, 2);
   refreshCollector(s);
@@ -598,7 +611,7 @@ function startGame(action: Extract<GameAction, { type: "START_GAME" }>): GameSta
     for (let i = 0; i < STARTING_HAND; i++) drawEvidence(s, p);
   }
   refreshCollector(s);
-  log(s, `Satwa Penjaga berkumpul di ${scenario.name}. Ronde 1 dimulai!`);
+  log(s, `The Wildlife Guardians gather on ${scenario.name}. Round 1 begins!`);
   return s;
 }
 
@@ -620,7 +633,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (s.decks.disaster.length === 0) {
         s.phase = "game_over";
         s.gameOverReason = "timeout";
-        log(s, "The Disaster deck is empty — the megathrust arrives. Out of time.");
+        log(s, "The Disaster deck is empty: the megathrust arrives. Out of time.");
         return s;
       }
       const id = s.decks.disaster.shift()!;
@@ -630,17 +643,17 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       s.discards.disaster.push(id);
       // Rute Laut tertutup total saat bencana Oseanografi.
       s.seaLaneOpen = card.category !== "oceanic";
-      log(s, `Disaster: "${card.title}" — ${card.roundEffect}`);
+      log(s, `Disaster: "${card.title}", ${card.roundEffect}`);
       if (!s.seaLaneOpen) log(s, "The Sea Lane is CLOSED this round.");
 
       if (card.roundEffectKey === "panic_spread") {
         const sectors = card.affectedSectorIds?.length ? card.affectedSectorIds : allSectorIds(s);
         for (const sec of sectors) for (const t of sectorTiles(s, sec)) panicTile(s, t);
-        log(s, "Aftershock swarm — villagers in the affected sector panic.");
+        log(s, "Aftershock swarm: villagers in the affected sector panic.");
       }
       if (card.roundEffectKey === "peek_disaster" && s.decks.disaster.length > 0) {
         s.peek = { kind: "disaster", cardId: s.decks.disaster[0] };
-        log(s, "Wildlife comes down the mountain — the team may peek at the next Disaster Card.");
+        log(s, "Wildlife comes down the mountain: the team may peek at the next Disaster Card.");
       }
       return s;
     }
@@ -664,11 +677,11 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const pool = inSector.length > 0 ? inSector : s.tiles.filter((t) => !t.isReadyPost && t.damage < 2);
       const target = pickMostVillagers(pool);
       s.newsTileIndex = target ? target.index : null;
-      log(s, `Berita masuk: "${card.title}" (${card.category}).`);
+      log(s, `Breaking news: "${card.title}" (${card.category}).`);
       if (target) {
         target.hasCrisisToken = true;
         panicTile(s, target);
-        log(s, `A Crisis Token lands on tile ${target.index} — everyone there panics.`);
+        log(s, `A Crisis Token lands on tile ${target.index}: everyone there panics.`);
       }
       return s;
     }
@@ -700,7 +713,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       const rawCost = moveCost(s, player.position, to, { ...player, altRouteReady: false }, viaSea);
       if (player.altRouteReady && rawCost > cost) {
         player.altRouteReady = false;
-        log(s, `${player.name} takes an alternate route — penalty ignored.`);
+        log(s, `${player.name} takes an alternate route: penalty ignored.`);
       }
       player.ap -= cost;
       player.position = to;
@@ -763,23 +776,12 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         group.push(v);
       }
       if (group.some((v) => v.status !== "calm")) {
-        log(s, "Panicking villagers will not follow — calm them first!");
+        log(s, "Panicking villagers will not follow: calm them first!");
         return s;
       }
-      if (escortBlocked(s, from, target)) {
-        log(s, "Evacuation along that route is locked this round.");
-        return s;
-      }
-      // Rumor yang belum dibongkar mengunci evakuasi: warga terlalu gaduh untuk
-      // digiring. Menenangkan satu per satu tidak cukup — Token Krisis hanya
-      // hilang lewat verifikasi yang berhasil atau kemampuan Komodo.
-      // Inilah yang membuat mekanik MIL menjadi penentu, bukan pelengkap.
-      if (from.hasCrisisToken) {
-        log(
-          s,
-          "They refuse to be led — the story on this tile is still unproven. " +
-            "Settle the story first!"
-        );
+      const refusal = escortRefusal(s, from, target);
+      if (refusal) {
+        log(s, ESCORT_REFUSAL_LOG[refusal]);
         return s;
       }
 
@@ -795,17 +797,22 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       player.escortBonusAp -= pool;
       player.ap -= cost - pool;
 
-      const fromCrisis = from.hasCrisisToken;
+      // 🐯 "Frontline Rescuer" counts villagers pulled out of the region this
+      // round's News Card is about. The old reading — villagers picked up off a
+      // Crisis Token tile — was unreachable by construction: the check above
+      // refuses exactly that escort, so the flag could never be true here.
+      const newsSector = s.activeNews?.targetSectorId ?? null;
+      const fromNewsSector = newsSector !== null && from.sectorId === newsSector;
       for (const v of group) {
         moveVillagerTo(s, v, from, to);
-        if (target.isReadyPost && fromCrisis) bumpSubMission(s, player, "rescue_crisis", 1);
+        if (target.isReadyPost && fromNewsSector) bumpSubMission(s, player, "rescue_crisis", 1);
         if (target.isReadyPost && viaSea) bumpSubMission(s, player, "safe_passage", 1);
       }
       player.position = to;
       if (target.isReadyPost) {
         log(
           s,
-          `${player.name} brings ${group.length} to a Ready Post — SAFE! ` +
+          `${player.name} brings ${group.length} to a Ready Post: SAFE! ` +
             `(${s.evacuees.length} now safe)`
         );
         applyGameOverCheck(s);
@@ -863,7 +870,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (!removeFromHand(player, card.id)) return state;
       s.discards.evidence.push(card.id);
       s.locksOpened.push(action.lock);
-      log(s, `${player.name} memasang "${card.title}" — gembok [${action.lock}] terbuka!`);
+      log(s, `${player.name} plays "${card.title}": the [${action.lock}] lock opens!`);
 
       if (card.bonus === "refund_ap") {
         if (s.phase === "p3_turns") player.ap += 1;
@@ -893,7 +900,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (!player || !card) return state;
       const roundKey = s.activeDisaster?.roundEffectKey;
       if (card.resourceKind === "trade" && roundKey === "block_trade") {
-        log(s, "Total gridlock — cards cannot be swapped this round.");
+        log(s, "Total gridlock: cards cannot be swapped this round.");
         return s;
       }
       if (
@@ -910,12 +917,12 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         case "ap2": {
           if (s.phase === "p3_turns") player.ap += 2;
           else s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 2;
-          log(s, `${player.name} makes an Emergency Sprint — +2 AP!`);
+          log(s, `${player.name} makes an Emergency Sprint: +2 AP!`);
           break;
         }
         case "alt_route": {
           player.altRouteReady = true;
-          log(s, `${player.name} menemukan Jalur Alternatif — penalti berikutnya diabaikan.`);
+          log(s, `${player.name} finds an Alternate Route, so the next penalty is ignored.`);
           break;
         }
         case "trade": {
@@ -928,7 +935,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               log(s, `${player.name} swaps a card with ${other.name} (Logistic Assist).`);
             }
           } else {
-            log(s, `${player.name} membagikan info logistik ke tim.`);
+            log(s, `${player.name} shares logistics intel with the team.`);
           }
           break;
         }
@@ -944,7 +951,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           if (v) {
             calmVillager(v);
             bumpSubMission(s, player, "calm_six", 1);
-            log(s, `${player.name} uses the loudspeaker — 1 villager calms down (0 AP).`);
+            log(s, `${player.name} uses the loudspeaker: 1 villager calms down (0 AP).`);
           } else {
             log(s, "Nobody here is panicking.");
           }
@@ -952,7 +959,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         }
         case "panic_shield": {
           s.panicShield = true;
-          log(s, `${player.name} steadies the team — the Panic Meter holds this round.`);
+          log(s, `${player.name} steadies the team: the Panic Meter holds this round.`);
           break;
         }
       }
@@ -968,7 +975,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       if (!player || !active || player.id !== active.id) return state;
       if (!other || other.id === player.id) return state;
       if (s.activeDisaster?.roundEffectKey === "block_trade") {
-        log(s, "Total gridlock — no bartering this round.");
+        log(s, "Total gridlock: no bartering this round.");
         return s;
       }
       // 🐒 Sinyal Repeater: Monyet barters at any range; everyone else must share a tile.
@@ -1010,7 +1017,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           const which = action.deck === "news" ? "news" : "disaster";
           const deck = which === "news" ? s.decks.news : s.decks.disaster;
           if (deck.length === 0) {
-            log(s, "That deck is empty — nothing to peek at.");
+            log(s, "That deck is empty: nothing to peek at.");
             return s;
           }
           s.peek = { kind: which, cardId: deck[0] };
@@ -1033,13 +1040,13 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           }
           s.discards.evidence.push(...ids.slice(0, 2));
           s.locksOpened.push(lock);
-          log(s, `${player.name} (Japanese Macaque) mines the archive — the [${lock}] lock is forced open!`);
+          log(s, `${player.name} (Japanese Macaque) mines the archive: the [${lock}] lock is forced open!`);
           refreshCollector(s);
           break;
         }
         case "tactical_escort": {
           player.escortBonusAp += 1;
-          log(s, `${player.name} (Harimau) siap Tactical Escort — +1 AP khusus evakuasi.`);
+          log(s, `${player.name} (Sumatran Tiger) readies Tactical Escort: +1 AP for escorting only.`);
           break;
         }
         case "network_sync": {
@@ -1057,7 +1064,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
               refreshCollector(s);
             }
           }
-          log(s, `${player.name} (Japanese Macaque) runs Network Sync with ${other.name}.`);
+          log(s, `${player.name} (Kea Parrot) runs Network Sync with ${other.name}.`);
           break;
         }
         case "suppress": {
@@ -1078,9 +1085,40 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
           if (tile) tile.hasCrisisToken = false;
           log(
             s,
-            `${player.name} (Andean Llama) calms the crowd — ${calmed} villagers settle` +
+            `${player.name} (Andean Llama) calms the crowd: ${calmed} villagers settle` +
               (hadCrisis ? ", and the Crisis Token here is lifted." : ".")
           );
+          break;
+        }
+        case "open_water": {
+          const options = openWaterOptions(s, player);
+          if (options.length === 0) {
+            // Not a refusal worth burning the once-per-round ability on.
+            log(s, "There is nobody the Deep Current can reach from here.");
+            return s;
+          }
+          const chosen = options.find(
+            (o) => o.villagerId === action.villagerId && o.toIndex === action.targetTileIndex
+          );
+          if (!chosen) return state;
+          const fromTile = s.tiles[chosen.fromIndex];
+          const villager = fromTile?.occupants.find((v) => v.id === chosen.villagerId);
+          if (!fromTile || !villager) return state;
+          moveVillagerTo(s, villager, fromTile, chosen.toIndex);
+          if (chosen.rescues) {
+            bumpSubMission(s, player, "safe_passage", 1);
+            log(
+              s,
+              `${player.name} (Whale Shark) rides the Deep Current in to shore: ` +
+                `1 villager reaches the Ready Post. (${s.evacuees.length} now safe)`
+            );
+            applyGameOverCheck(s);
+          } else {
+            log(
+              s,
+              `${player.name} (Whale Shark) takes 1 villager into the water at tile ${chosen.toIndex}.`
+            );
+          }
           break;
         }
         default:
@@ -1112,7 +1150,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
       // Pos Siaga bonus stage.
       if (tile?.isReadyPost) {
         s.pendingApBonus[player.id] = (s.pendingApBonus[player.id] ?? 0) + 1;
-        log(s, `${player.name} rests at a Ready Post — +1 AP next round.`);
+        log(s, `${player.name} rests at a Ready Post: +1 AP next round.`);
       }
 
       if (!s.playersEndedTurn.includes(player.id)) s.playersEndedTurn.push(player.id);
@@ -1162,6 +1200,15 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         log(s, `"${card.title}" is already owned.`);
         return s;
       }
+      // Two cards carry each standing bonus, but the bonus itself applies once.
+      // Refuse the second one instead of pocketing the Reputation for nothing.
+      if (isRewardEffectCovered(card.effectKey, s.ownedRewards)) {
+        log(
+          s,
+          `"${card.title}" would add nothing: the team already owns a Reward with that effect.`
+        );
+        return s;
+      }
       if (s.reputation < card.cost) {
         log(s, `Not enough Reputation for "${card.title}" (needs ${card.cost}).`);
         return s;
@@ -1182,7 +1229,7 @@ export function reduce(state: GameState | null, action: GameAction): GameState |
         case "p1_disaster":
           if (!s.activeDisaster) return state;
           s.phase = "p2_news";
-          log(s, "Phase 2 — Breaking News.");
+          log(s, "Phase 2: Breaking News.");
           return s;
         case "p2_news":
           if (!s.activeNews) return state;

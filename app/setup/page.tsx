@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
 import { emojiForRole } from "@/lib/roleEmoji";
 import { ART } from "@/data/artManifest";
+import { PrintedImageOr } from "@/components/cards/PrintedCard";
 import {
   AbilityIcon,
   iconForActive,
@@ -168,18 +169,24 @@ export default function SetupPage() {
                 >
                   <span className="flex items-center gap-2">
                     {/* The printed card, so the layout is already familiar at
-                        the table. Falls back to the emoji if art is missing. */}
-                    {ART.roleCard[role.id] ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={ART.roleCard[role.id]}
-                        alt=""
-                        className="h-11 w-[29px] shrink-0 rounded-[3px] object-cover shadow-sm"
-                        draggable={false}
-                      />
-                    ) : (
-                      <span className="text-xl leading-none">{emojiForRole(role.id)}</span>
-                    )}
+                        the table. It grows once the role is picked, because at
+                        that point the panel underneath is the abilities and the
+                        card is worth reading rather than just recognising.
+                        Falls back to the emoji if the art is missing or fails
+                        to load; the name, title and abilities below are the
+                        real content either way. */}
+                    <PrintedImageOr
+                      src={ART.roleCard[role.id]}
+                      className={cn(
+                        "shrink-0 rounded-[3px] object-cover shadow-sm",
+                        selected ? "h-[72px] w-12" : "h-11 w-[29px]"
+                      )}
+                      fallback={
+                        <span className={selected ? "text-3xl leading-none" : "text-xl leading-none"}>
+                          {emojiForRole(role.id)}
+                        </span>
+                      }
+                    />
                     <span className="font-black">{role.name}</span>
                     <span className="text-[11px] font-bold text-zinc-400">{role.title}</span>
                     {takenByOther && (

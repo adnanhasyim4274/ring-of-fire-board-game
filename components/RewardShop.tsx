@@ -2,10 +2,23 @@
 import { motion } from "framer-motion";
 import { Award, Check, ShoppingBag } from "lucide-react";
 import type { GameAction, GameState } from "@/engine/types";
-import { rewardCards } from "@/data/rewardCards";
+import { rewardCards, isRewardEffectCovered } from "@/data/rewardCards";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { en as id } from "@/lib/i18n/en";
+
+/**
+ * Each standing bonus is printed on two cards, but it only ever applies once,
+ * so the second copy used to be a live button that took the Reputation and
+ * changed nothing. The reducer now refuses it — and this is the half that
+ * matters, because the player has to be able to see that BEFORE they tap.
+ *
+ * Belongs in lib/i18n/en.ts; that file is owned by another lane.
+ */
+const TEXT = {
+  covered: "Already covered",
+  coveredWhy: "You own another Reward with this exact effect, and it does not stack.",
+} as const;
 
 /** FASE 5 — belanja Poin Reputasi jadi peningkatan permanen untuk seluruh tim. */
 export function RewardShop({
@@ -36,6 +49,7 @@ export function RewardShop({
       ) : (
         <ul className="space-y-1.5">
           {available.map((card) => {
+            const covered = isRewardEffectCovered(card.effectKey, state.ownedRewards);
             const affordable = state.reputation >= card.cost;
             return (
               <motion.li
@@ -43,7 +57,11 @@ export function RewardShop({
                 layout
                 className={cn(
                   "flex items-start gap-2 rounded-xl border-2 bg-white p-2.5",
-                  affordable ? "border-amber-400" : "border-zinc-200 opacity-70"
+                  covered
+                    ? "border-zinc-200 opacity-60"
+                    : affordable
+                      ? "border-amber-400"
+                      : "border-zinc-200 opacity-70"
                 )}
               >
                 <span className="min-w-0 flex-1">
@@ -51,13 +69,18 @@ export function RewardShop({
                   <span className="mt-0.5 block text-[11px] leading-snug text-zinc-600">
                     {card.description}
                   </span>
+                  {covered && (
+                    <span className="mt-1 block text-[11px] font-bold leading-snug text-zinc-500">
+                      {TEXT.coveredWhy}
+                    </span>
+                  )}
                 </span>
                 <Button
                   className="shrink-0 px-3 text-xs"
-                  disabled={!affordable}
+                  disabled={!affordable || covered}
                   onClick={() => dispatch({ type: "BUY_REWARD", rewardId: card.id })}
                 >
-                  {card.cost} {id.reward.cost}
+                  {covered ? TEXT.covered : `${card.cost} ${id.reward.cost}`}
                 </Button>
               </motion.li>
             );

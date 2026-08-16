@@ -198,7 +198,7 @@ function playGame(seed: number, roster: readonly string[] = FULL_TABLE) {
   return s;
 }
 
-describe("BALANCE — is the demo winnable by a competent team?", () => {
+describe("BALANCE: is the demo winnable by a competent team?", () => {
   it("reports outcomes across 12 seeds on Awas (normal)", () => {
     const results: Record<string, number> = {};
     let totalEvac = 0, totalRep = 0, wins = 0;
@@ -256,7 +256,7 @@ describe("BALANCE — is the demo winnable by a competent team?", () => {
     expect(wins).toBeLessThanOrEqual(11);
   }, 60_000);
 
-  it("INTEGRITY — a team that ignores verification must NOT be able to win", () => {
+  it("INTEGRITY: a team that ignores verification must NOT be able to win", () => {
     // This bot never opens a lock and always abstains: pure rescue, zero MIL.
     // If it can still win, the educational core of the game is skippable.
     function playIgnoringMil(seed: number, roster: readonly string[] = FULL_TABLE): GameState {
